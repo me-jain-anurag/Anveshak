@@ -7,6 +7,7 @@ scoring policy, so it is part of the reproducible findings.
 from __future__ import annotations
 
 from .chains.base import Verification
+from .crosschain import CrossChainLink
 from .domain import EndpointKind, Frozen, Grade
 from .policy import ScoringPolicy
 from .profiles import AddressProfile, Cluster, build_profiles
@@ -14,7 +15,7 @@ from .risk import Alert, RiskAssessment, alerts_for, flow_risks, wallet_risk
 from .scoring import ConfidenceScore, score_endpoint
 from .sourcetrust import SourceTrust
 from .tracer import TraceResult
-from .typologies import TypologyHit, detect
+from .typologies import Typology, TypologyHit, detect
 
 
 class NearestVasp(Frozen):
@@ -49,8 +50,10 @@ def _nearest(trace: TraceResult, scores: dict[str, ConfidenceScore]) -> list[Nea
         if e.kind is not EndpointKind.VASP or e.attribution is None or e.id not in scores:
             continue
         s = scores[e.id]
-        key = e.attribution.entity_id if e.attribution.grade is not Grade.X and e.attribution.entity_id else f"conflict:{e.address}"
-        rank_key = (e.hops, -s.score, e.address)
+        conflicted = e.attribution.grade is Grade.X or not e.attribution.entity_id
+        key = f"conflict:{e.address}" if conflicted else e.attribution.entity_id
+        # Resolved owners first (nearest, then strongest evidence); conflicted owners after them.
+        rank_key = (conflicted, e.hops, -s.score, e.address)
         if key not in best or rank_key < best[key][0]:
             best[key] = (rank_key, e, s)
     ordered = sorted(best.values(), key=lambda v: v[0])
@@ -71,7 +74,32 @@ def _nearest(trace: TraceResult, scores: dict[str, ConfidenceScore]) -> list[Nea
     ]
 
 
-def analyze(traces: list[TraceResult], verifications: dict[str, Verification], policy: ScoringPolicy, trust: SourceTrust | None) -> tuple[list[TraceAnalysis], list[RiskAssessment]]:
+def _link_hits(trace: TraceResult, links: list[CrossChainLink]) -> list[TypologyHit]:
+    endpoint_ids = {e.id for e in trace.endpoints}
+    hits = []
+    for link in links:
+        if link.endpoint_id not in endpoint_ids:
+            continue
+        destination = f"{link.to_chain.value if link.to_chain else link.to_chain_code}:{link.to_address}"
+        hits.append(
+            TypologyHit(
+                typology=Typology.CHAIN_HOPPING,
+                rule="T-CHAINHOP",
+                addresses=(link.from_address, link.to_address),
+                tx_hashes=tuple(t for t in (link.from_tx, link.to_tx) if t),
+                detail=f"{link.protocol} swap {link.asset_in} -> {link.asset_out} to {destination} ({link.rule})",
+            )
+        )
+    return hits
+
+
+def analyze(
+    traces: list[TraceResult],
+    verifications: dict[str, Verification],
+    policy: ScoringPolicy,
+    trust: SourceTrust | None,
+    links: list[CrossChainLink] | None = None,
+) -> tuple[list[TraceAnalysis], list[RiskAssessment]]:
     per_trace = []
     for trace in traces:
         scores = {}
@@ -79,7 +107,8 @@ def analyze(traces: list[TraceResult], verifications: dict[str, Verification], p
             s = score_endpoint(e, verifications, policy)
             if s is not None:
                 scores[e.id] = s
-        hits = detect(trace, policy)
+        hits = detect(trace, policy) + _link_hits(trace, links or [])
+        hits = sorted({(h.rule, h.addresses, h.tx_hashes): h for h in hits}.values(), key=lambda h: (h.rule, h.addresses, h.tx_hashes))
         profiles, clusters = build_profiles(trace, hits)
         per_trace.append((trace, scores, hits, profiles, clusters))
 

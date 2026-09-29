@@ -46,7 +46,8 @@ def test_ofac_list_applies_evm_address_to_all_evm_chains():
     raw = json.dumps(["0x8589427373D6D84E98730D7795D8f6f8731FDA16", "TA3rH2A7iHnm6pKH8gr9cK1EZnShnmZdFg", "bogus"]).encode()
     labels, skipped = parse_ofac_list(raw, "USDT")
     assert all(l.source_class is SourceClass.AUTHORITY and l.risk_flags == (RiskFlag.SANCTIONED,) and l.category is None for l in labels)
-    assert {l.chain for l in labels} == {Chain.ETHEREUM, Chain.BSC, Chain.POLYGON, Chain.TRON}
+    evm = {c for c in Chain if c.family.value == "evm"}
+    assert {l.chain for l in labels} == evm | {Chain.TRON}
     assert sum(skipped.values()) == 1
 
 

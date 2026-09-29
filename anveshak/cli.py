@@ -36,15 +36,27 @@ def _print_summary(result: CaseResult, report_path, report_hash: str) -> None:
     f = result.findings
     banner = "  [SYNTHETIC — NOT EVIDENCE]" if f.data_mode is DataMode.SYNTHETIC else ""
     print(f"case {result.case_id}  ref {f.request.case_reference}  mode {f.data_mode.value}{banner}")
-    for trace in f.traces:
-        print(f"\n{trace.chain.value} {trace.subject} — {'funds out' if trace.params.direction is Direction.OUT else 'funding in'}")
+    links = {link.id: link for link in f.crosschain_links}
+    continued = {c.trace_index: links.get(c.link_id) for c in f.continuations}
+    for index, (trace, analysis) in enumerate(zip(f.traces, f.analyses)):
+        direction = "funds out" if trace.params.direction is Direction.OUT else "funding in"
+        print(f"\n{trace.chain.value} {trace.subject} — {direction}")
+        link = continued.get(index)
+        if link is not None:
+            print(f"  (cross-chain continuation: {link.protocol} swap of {link.from_chain.value} tx {link.from_tx[:16]}… → {link.to_chain_code})")
         if not trace.endpoints:
             print(f"  (no endpoints: {trace.coverage.subject_note or 'nothing to follow'})")
+        scores = {s.endpoint_id: s for s in analysis.confidences}
         for e in trace.endpoints:
             a = e.attribution
             who = f"{a.entity_name or 'CONFLICT'} [{a.grade.value} {a.rule}]" if a else ""
+            conf = f" confidence {scores[e.id].score}/100" if e.id in scores else ""
             amount = e.bottleneck.formatted if e.bottleneck else ""
-            print(f"  {e.kind.value:18} hops={e.hops}  {e.address}  {who}  {amount}")
+            print(f"  {e.kind.value:18} hops={e.hops}  {e.address}  {who}{conf}  {amount}")
+        for n in analysis.nearest_vasps[:3]:
+            print(f"  nearest VASP #{n.rank}: {n.entity_name or 'unresolved owner'} at {n.hops} hop(s), grade {n.grade.value}, confidence {n.confidence} ({n.band})")
+        if analysis.typologies:
+            print("  typologies: " + ", ".join(sorted({h.rule for h in analysis.typologies})))
         c = trace.coverage
         print(
             f"  coverage: expanded {c.addresses_expanded}, excluded time-order {c.excluded_time_order} / dust {c.excluded_dust} / "
@@ -53,10 +65,23 @@ def _print_summary(result: CaseResult, report_path, report_hash: str) -> None:
             + (f", {len(c.incomplete_histories)} incomplete histories" if c.incomplete_histories else "")
             + (f", {len(c.source_errors)} source errors" if c.source_errors else "")
         )
+    if f.crosschain_links:
+        print("\ncross-chain links:")
+        for link in f.crosschain_links:
+            confirmed = {True: "confirmed", False: "NOT FOUND", None: "unconfirmed"}[link.destination_confirmed]
+            print(f"  {link.rule} {link.from_chain.value} {link.from_tx[:16]}… → {link.to_chain_code} {link.to_address} ({link.asset_out}, destination {confirmed})")
+    for risk in f.subject_risks:
+        print(f"\nwallet risk {risk.chain} {risk.address}: {risk.level} ({risk.score}/100)")
+    alerts = sorted({(a.severity.value, a.rule, a.message) for an in f.analyses for a in an.alerts})
+    if alerts:
+        print("\nalerts:")
+        for severity, rule, message in alerts:
+            print(f"  [{severity}] {rule}: {message}")
     if f.routing:
         print("\nrouting drafts:")
         for d in f.routing:
-            print(f"  {d.status.value:20} {d.request_type.value:14} {d.target_name}  ({d.chain.value}, {d.direction.value}, grade {d.grade.value if d.grade else '-'})")
+            conf = f", confidence {d.confidence}" if d.confidence is not None else ""
+            print(f"  {d.status.value:20} {d.request_type.value:14} {d.target_name}  ({d.chain.value}, {d.direction.value}, grade {d.grade.value if d.grade else '-'}{conf})")
     print(f"\nfindings hash  {result.findings_hash}")
     print(f"report         {report_path}\nreport sha256  {report_hash}")
 

@@ -18,6 +18,11 @@ native:
   bsc:      {min_amount: 1000000000000000}      # 0.001 BNB
   polygon:  {min_amount: 1000000000000000000}   # 1 POL
   tron:     {min_amount: 1000000}               # 1 TRX
+  arbitrum: {min_amount: 1000000000000000}      # 0.001 ETH
+  base:     {min_amount: 1000000000000000}      # 0.001 ETH
+  optimism: {min_amount: 1000000000000000}      # 0.001 ETH
+  avalanche: {min_amount: 10000000000000000}    # 0.01 AVAX
+  solana:   {min_amount: 1000000}               # 0.001 SOL
 
 tokens:
   - chain: ethereum
@@ -69,3 +74,74 @@ tokens:
     issuer: circle
     min_amount: 1000000
     sources: ["https://api.coingecko.com/api/v3/coins/bridged-usdc-polygon-pos-bridge"]
+  # --- added 2026-09-30, verified against CoinGecko (coin API detail_platforms / contract lookup) ---
+  - chain: polygon
+    contract: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
+    symbol: USDT0
+    decimals: 6
+    issuer: null          # CoinGecko id "usdt0" — not Tether's native USDT; freeze authority not recorded
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/polygon-pos/contract/0xc2132d05d31c914a87c6611c10748aeb04b58e8f"]
+  - chain: arbitrum
+    contract: "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"
+    symbol: USDT0
+    decimals: 6
+    issuer: null
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/arbitrum-one/contract/0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"]
+  - chain: arbitrum
+    contract: "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: base
+    contract: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: optimism
+    contract: "0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: avalanche
+    contract: "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7"
+    symbol: USDT
+    decimals: 6
+    issuer: tether
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/tether"]
+  - chain: avalanche
+    contract: "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: bsc
+    contract: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+    symbol: USDC
+    decimals: 18          # Binance-bridged USDC; 18 decimals on BNB Smart Chain
+    issuer: null
+    min_amount: 1000000000000000000
+    sources: ["https://api.coingecko.com/api/v3/coins/binance-smart-chain/contract/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"]
+  - chain: solana
+    contract: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+    symbol: USDT
+    decimals: 6
+    issuer: tether
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/tether"]
+  - chain: solana
+    contract: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]

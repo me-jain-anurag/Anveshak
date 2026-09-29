@@ -9,6 +9,8 @@ Canonical forms:
   bitcoin   base58 as given (case-sensitive), bech32/bech32m lower-case
   evm       0x + 40 lower-case hex
   tron      Base58Check "T..." form
+  solana    base58 of a 32-byte public key, as given (Solana addresses carry NO checksum:
+            a typo that still decodes to 32 bytes cannot be detected — confirm by hand)
 """
 
 from __future__ import annotations
@@ -231,6 +233,66 @@ def _normalize_bitcoin(address: str) -> str:
     raise AddressError("unsupported Bitcoin address format (mainnet P2PKH, P2SH, bech32, bech32m only)")
 
 
+# --------------------------------------------------------------------------- Solana
+
+def _normalize_solana(address: str) -> str:
+    if not 32 <= len(address) <= 44:
+        raise AddressError("Solana address must be 32-44 base58 characters")
+    if len(b58decode(address)) != 32:
+        raise AddressError("Solana address must decode to 32 bytes")
+    return address
+
+
+_ED25519_P = 2**255 - 19
+_ED25519_D = (-121665 * pow(121666, _ED25519_P - 2, _ED25519_P)) % _ED25519_P
+_SQRT_M1 = pow(2, (_ED25519_P - 1) // 4, _ED25519_P)
+
+
+def ed25519_on_curve(key: bytes) -> bool:
+    """True if the 32 bytes decompress to a point on the ed25519 curve (RFC 8032 section 5.1.3).
+
+    Solana program-derived addresses (token accounts, pool vaults, program authorities) are
+    deliberately *off* the curve, so no private key exists for them: they are controlled by
+    programs, not people. This is how the tracer recognises them without any API call."""
+    if len(key) != 32:
+        return False
+    y = int.from_bytes(key, "little") & ((1 << 255) - 1)
+    sign = key[31] >> 7
+    if y >= _ED25519_P:
+        return False
+    u = (y * y - 1) % _ED25519_P
+    v = (_ED25519_D * y * y + 1) % _ED25519_P
+    x2 = u * pow(v, _ED25519_P - 2, _ED25519_P) % _ED25519_P
+    x = pow(x2, (_ED25519_P + 3) // 8, _ED25519_P)
+    if (x * x - x2) % _ED25519_P != 0:
+        x = x * _SQRT_M1 % _ED25519_P
+    if (x * x - x2) % _ED25519_P != 0:
+        return False
+    return not (x == 0 and sign == 1)
+
+
+def solana_is_program_derived(address: str) -> bool:
+    return not ed25519_on_curve(b58decode(address))
+
+
+def solana_find_program_address(seeds: list[bytes], program_id: str) -> tuple[str, int]:
+    """Solana `find_program_address`: first bump (255 down to 0) whose hash is off the curve."""
+    program = b58decode(program_id)
+    for bump in range(255, -1, -1):
+        digest = hashlib.sha256(b"".join(seeds) + bytes([bump]) + program + b"ProgramDerivedAddress").digest()
+        if not ed25519_on_curve(digest):
+            return b58encode(digest), bump
+    raise AddressError("no viable program address")
+
+
+SPL_TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+
+
+def solana_associated_token_account(owner: str, mint: str, token_program: str = SPL_TOKEN_PROGRAM) -> str:
+    return solana_find_program_address([b58decode(owner), b58decode(token_program), b58decode(mint)], ASSOCIATED_TOKEN_PROGRAM)[0]
+
+
 # --------------------------------------------------------------------------- entry point
 
 def normalize(chain: Chain, address: str) -> str:
@@ -245,6 +307,8 @@ def normalize(chain: Chain, address: str) -> str:
         return _normalize_evm(address)
     if family is ChainFamily.TRON:
         return _normalize_tron(address)
+    if family is ChainFamily.SOLANA:
+        return _normalize_solana(address)
     return _normalize_bitcoin(address)
 
 
@@ -254,3 +318,12 @@ def is_valid(chain: Chain, address: str) -> bool:
         return True
     except AddressError:
         return False
+
+
+def detect_chains(address: str) -> list[Chain]:
+    """Chains on which `address` is valid, decided by format and checksum alone.
+
+    An EVM address is the same key on every EVM chain, so all EVM chains are returned; the
+    caller decides which to trace (e.g. only those with activity). The formats cannot
+    collide: Bitcoin and Tron base58 decode to 25 bytes (with checksums), Solana to 32."""
+    return [chain for chain in Chain if is_valid(chain, address.strip())]

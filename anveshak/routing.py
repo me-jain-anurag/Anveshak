@@ -81,6 +81,7 @@ class RoutingDecision(Frozen):
     endpoint_ids: tuple[str, ...]
     channels: tuple[Channel, ...]
     jurisdiction: str | None
+    via: str | None = None  # how value reached this trace's subject, for cross-chain continuations
     draft_text: str
 
 
@@ -105,6 +106,8 @@ def _draft(case_ref: str, d: dict) -> str:
         f"Legal basis: {LEGAL_BASIS_DEFAULT}",
         "",
     ]
+    if d.get("via"):
+        lines += [d["via"], ""]
     if d["request_type"] in (RequestType.DISCLOSURE, RequestType.FREEZE):
         direction_text = (
             "received value that can be traced from the subject address"
@@ -151,9 +154,13 @@ def route(
     registry: AssetRegistry,
     scores: dict[str, ConfidenceScore],
     policy: ScoringPolicy,
+    via: dict[int, str] | None = None,
 ) -> list[RoutingDecision]:
+    """`via` maps a trace index to a sentence explaining how value reached that trace's
+    subject (set for cross-chain continuation traces)."""
     decisions: list[RoutingDecision] = []
-    for trace in traces:
+    for index, trace in enumerate(traces):
+        note = (via or {}).get(index)
         by_id = {t.id: t for t in trace.transfers}
         groups: dict[str, list[Endpoint]] = defaultdict(list)
         for e in trace.endpoints:
@@ -164,12 +171,12 @@ def route(
             groups[key].append(e)
 
         for key, endpoints in sorted(groups.items()):
-            decisions += _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, directory, scores, policy)
-        decisions += _issuer_decisions(case_ref, trace, directory, registry)
+            decisions += _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, directory, scores, policy, note)
+        decisions += _issuer_decisions(case_ref, trace, directory, registry, note)
     return decisions
 
 
-def _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, directory, scores, policy) -> list[RoutingDecision]:
+def _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, directory, scores, policy, via=None) -> list[RoutingDecision]:
     path_state = {e.id: _path_status(e, verifications) for e in endpoints}
     conflicted = key.startswith("conflict:")
     entry = None if conflicted else directory.get(key)
@@ -232,7 +239,7 @@ def _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, direc
         fields = dict(
             chain=trace.chain, direction=trace.params.direction, subject=trace.subject, target_name=target_name, request_type=request_type,
             transactions=tx_refs, deposit_addresses=deposit, grade=grade.value, rules=rules, channels=entry.channels if entry else (),
-            confidence=confidence, band=band, holdings=(),
+            confidence=confidence, band=band, holdings=(), via=via,
         )
         out.append(
             RoutingDecision(
@@ -255,13 +262,14 @@ def _vasp_decisions(case_ref, trace, key, endpoints, by_id, verifications, direc
                 endpoint_ids=tuple(e.id for e in endpoints),
                 channels=entry.channels if entry else (),
                 jurisdiction=jurisdiction,
+                via=via,
                 draft_text=_draft(case_ref, fields),
             )
         )
     return out
 
 
-def _issuer_decisions(case_ref, trace, directory, registry) -> list[RoutingDecision]:
+def _issuer_decisions(case_ref, trace, directory, registry, via=None) -> list[RoutingDecision]:
     issuer_hits: dict[str, list] = defaultdict(list)
     for bal in trace.balances:
         if bal.amount <= 0:
@@ -277,7 +285,7 @@ def _issuer_decisions(case_ref, trace, directory, registry) -> list[RoutingDecis
         holdings = tuple(f"{b.address}: {b.formatted} ({b.as_of})" for b in balances)
         fields = dict(
             chain=trace.chain, direction=trace.params.direction, subject=trace.subject, target_name=name, request_type=RequestType.ISSUER_FREEZE,
-            transactions=(), deposit_addresses=[], grade=None, rules=(), channels=entry.channels if entry else (), confidence=None, band=None, holdings=holdings,
+            transactions=(), deposit_addresses=[], grade=None, rules=(), channels=entry.channels if entry else (), confidence=None, band=None, holdings=holdings, via=via,
         )
         out.append(
             RoutingDecision(
@@ -300,6 +308,7 @@ def _issuer_decisions(case_ref, trace, directory, registry) -> list[RoutingDecis
                 endpoint_ids=tuple(e.id for e in trace.endpoints if e.kind is EndpointKind.DORMANT and e.address in addresses),
                 channels=entry.channels if entry else (),
                 jurisdiction=None,
+                via=via,
                 draft_text=_draft(case_ref, fields),
             )
         )

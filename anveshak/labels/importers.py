@@ -16,8 +16,8 @@ from pathlib import Path
 import httpx
 import yaml
 
-from ..addresses import AddressError, normalize
-from ..chain import Chain, ChainFamily
+from ..addresses import AddressError, detect_chains, normalize
+from ..chain import Chain
 from ..domain import Category, Label, RiskFlag, SourceClass
 from ..evidence import sha256_hex
 from .store import write_jsonl
@@ -208,17 +208,14 @@ def import_graphsense(out_dir: Path, packs: list[str] | None = None, client: htt
 
 OFAC_RAW = "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_{}.json"
 OFAC_PRIMARY = "https://sanctionssearch.ofac.treas.gov/"
-OFAC_TICKERS = ["XBT", "ETH", "TRX", "USDT", "USDC"]
+OFAC_TICKERS = ["XBT", "ETH", "TRX", "USDT", "USDC", "SOL", "ARB", "BSC"]
 
 
 def _chains_for_listed_address(address: str) -> list[Chain]:
-    """OFAC lists an address per *asset*, not per chain. Decide the chain(s) by address format.
-    An EVM address is the same key on every EVM chain, so a sanctions flag applies to all of them."""
-    if address.startswith("0x"):
-        return [c for c in Chain if c.family is ChainFamily.EVM]
-    if address.startswith("T"):
-        return [Chain.TRON]
-    return [Chain.BITCOIN]
+    """OFAC lists an address per *asset*, not per chain. The chain is decided from the address
+    format and checksum (`detect_chains`); an EVM address is the same key on every EVM chain,
+    so a sanctions flag applies to all of them."""
+    return detect_chains(address)
 
 
 def parse_ofac_list(raw: bytes, ticker: str) -> tuple[list[Label], Counter]:
@@ -231,12 +228,11 @@ def parse_ofac_list(raw: bytes, ticker: str) -> tuple[list[Label], Counter]:
         if not isinstance(entry, str):
             skipped["non-string entry"] += 1
             continue
-        for chain in _chains_for_listed_address(entry.strip()):
-            try:
-                address = normalize(chain, entry)
-            except AddressError:
-                skipped[f"invalid address for {chain}"] += 1
-                continue
+        chains = _chains_for_listed_address(entry.strip())
+        if not chains:
+            skipped["address not valid on any supported chain"] += 1
+        for chain in chains:
+            address = normalize(chain, entry)
             labels.append(
                 Label(
                     chain=chain,

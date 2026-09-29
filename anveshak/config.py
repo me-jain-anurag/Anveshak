@@ -30,6 +30,11 @@ class Settings:
     esplora_base_url: str
     var_dir: Path
     api_token: str
+    solana_rpc_url: str = "https://api.mainnet-beta.solana.com"
+    solana_max_signatures: int = 300
+    callback_allowlist: tuple[str, ...] = ()
+    monitor_interval_seconds: int = 600
+    embedded_workers: int = 2
     data_dir: Path = DATA_DIR
 
     @property
@@ -57,4 +62,9 @@ def load_settings() -> Settings:
         esplora_base_url=env.get("ESPLORA_BASE_URL", "https://blockstream.info/api").rstrip("/"),
         var_dir=var_dir,
         api_token=env.get("ANVESHAK_API_TOKEN", "").strip(),
+        solana_rpc_url=env.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com").strip(),
+        solana_max_signatures=int(env.get("SOLANA_MAX_SIGNATURES", "300")),
+        callback_allowlist=tuple(h.strip().lower() for h in env.get("ANVESHAK_CALLBACK_ALLOWLIST", "").split(",") if h.strip()),
+        monitor_interval_seconds=int(env.get("ANVESHAK_MONITOR_INTERVAL", "600")),
+        embedded_workers=int(env.get("ANVESHAK_EMBEDDED_WORKERS", "2")),
     )
