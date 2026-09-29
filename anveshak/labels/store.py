@@ -90,4 +90,5 @@ class LabelStore:
 def write_jsonl(path: Path, labels: list[Label]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ordered = sorted(labels, key=lambda l: (l.chain, l.address, l.source_id, l.text))
-    path.write_text("".join(json.dumps(l.model_dump(mode="json"), sort_keys=True) + "\n" for l in ordered), encoding="utf-8")
+    body = "".join(json.dumps(l.model_dump(mode="json"), sort_keys=True) + "\n" for l in ordered)
+    path.write_text(body, encoding="utf-8", newline="\n")  # LF on every OS: byte-identical datasets

@@ -249,6 +249,15 @@ class EtherscanSource(ChainSource):
 
     # ------------------------------------------------------------------ extras
 
+    def has_activity(self, address: str) -> bool:
+        """Cheap probe (two one-record calls): has this address ever sent/received coin or tokens here?"""
+        address = normalize(self.chain, address)
+        for action in ("txlist", "tokentx"):
+            result, _ = self._call({"module": "account", "action": action, "address": address, "page": "1", "offset": "1", "sort": "asc"})
+            if isinstance(result, list) and result:
+                return True
+        return False
+
     def is_contract(self, address: str) -> bool | None:
         address = normalize(self.chain, address)
         if address not in self._contract_cache:

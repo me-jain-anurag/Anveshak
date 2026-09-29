@@ -5,7 +5,10 @@
     anveshak replay <case_id>                       re-run from stored evidence, compare findings hash
     anveshak labels import graphsense|ofac          refresh public label datasets
     anveshak labels stats | lookup | attest
-    anveshak serve                                  HTTP API + dashboard
+    anveshak serve                                  HTTP API + dashboard (+ embedded workers, monitor)
+    anveshak worker                                 extra case worker process (shares the case database)
+    anveshak monitor [--once]                       watchlist monitor
+    anveshak export <case_id> --format neo4j|graphml
 """
 
 from __future__ import annotations
@@ -198,6 +201,57 @@ def cmd_labels(args) -> int:
     return 2
 
 
+def cmd_worker(args) -> int:
+    import threading
+
+    from .service import Service
+
+    service = Service(load_settings())
+    stop = threading.Event()
+    worker_id = args.worker_id or f"cli-{__import__('uuid').uuid4().hex[:8]}"
+    print(f"worker {worker_id} polling {service.settings.db_path} (Ctrl+C to stop)")
+    try:
+        service.worker_loop(worker_id, stop, poll_seconds=1.0)
+    except KeyboardInterrupt:
+        stop.set()
+    return 0
+
+
+def cmd_monitor(args) -> int:
+    from .service import Service
+
+    service = Service(load_settings())
+    if args.once:
+        created = service.monitor_once()
+        print(f"checked {len(service.store.watches())} watched address(es); {len(created)} movement alert(s)")
+        return 0
+    import threading
+
+    stop = threading.Event()
+    print(f"monitoring every {service.settings.monitor_interval_seconds}s (Ctrl+C to stop)")
+    try:
+        service.monitor_loop(stop)
+    except KeyboardInterrupt:
+        stop.set()
+    return 0
+
+
+def cmd_export(args) -> int:
+    from .exports import to_cypher, to_graphml
+
+    settings = load_settings()
+    path = settings.reports_dir / f"{args.case_id}.json"
+    if not path.exists():
+        print(f"no stored findings at {path}", file=sys.stderr)
+        return 2
+    result = CaseResult.model_validate_json(path.read_text(encoding="utf-8"))
+    text = to_cypher(result) if args.format == "neo4j" else to_graphml(result)
+    out = settings.reports_dir / f"{args.case_id}.{'cypher' if args.format == 'neo4j' else 'graphml'}"
+    out.write_text(text, encoding="utf-8", newline="\n")
+    print(out)
+    return 0
+
+
 def cmd_serve(args) -> int:
     import uvicorn
 
@@ -251,6 +305,19 @@ def build_parser() -> argparse.ArgumentParser:
     at.add_argument("--as-of", required=True, help="YYYY-MM-DD")
     at.add_argument("--source-class", default="entity_attested", choices=["entity_attested", "authority"])
     lab.set_defaults(func=cmd_labels)
+
+    w = sub.add_parser("worker", help="run a case worker against the shared case database")
+    w.add_argument("--worker-id")
+    w.set_defaults(func=cmd_worker)
+
+    m = sub.add_parser("monitor", help="check watched addresses for fund movement")
+    m.add_argument("--once", action="store_true", help="single pass instead of a loop")
+    m.set_defaults(func=cmd_monitor)
+
+    x = sub.add_parser("export", help="export a case graph for Neo4j (Cypher) or GraphML tools")
+    x.add_argument("case_id")
+    x.add_argument("--format", choices=["neo4j", "graphml"], default="neo4j")
+    x.set_defaults(func=cmd_export)
 
     s = sub.add_parser("serve", help="run the HTTP API and dashboard")
     s.add_argument("--host", default="127.0.0.1")

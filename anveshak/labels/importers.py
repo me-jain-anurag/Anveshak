@@ -202,7 +202,7 @@ def import_graphsense(out_dir: Path, packs: list[str] | None = None, client: htt
         write_jsonl(Path(out_dir) / f"{Path(pack).stem}.jsonl", labels)
         manifest["files"].append({"pack": pack, "url": url, "sha256": sha256_hex(raw), "kept": len(labels), "skipped": dict(skipped)})
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    (Path(out_dir) / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (Path(out_dir) / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8", newline="\n")
     return manifest
 
 
@@ -264,7 +264,7 @@ def import_ofac(out_dir: Path, tickers: list[str] | None = None, client: httpx.C
         write_jsonl(Path(out_dir) / f"ofac_{ticker.lower()}.jsonl", labels)
         manifest["files"].append({"ticker": ticker, "url": url, "sha256": sha256_hex(response.content), "kept": len(labels), "skipped": dict(skipped)})
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    (Path(out_dir) / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (Path(out_dir) / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8", newline="\n")
     return manifest
 
 
