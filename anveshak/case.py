@@ -282,7 +282,8 @@ class Engine:
                         cont = params.model_copy(update={"since": origin.timestamp, "until": None, "max_hops": max(1, params.max_hops - hops_used)})
                         work.append((link.to_chain, link.to_address, cont, depth + 1, index, link.id))
 
-        analyses, subject_risks = analyze(traces, verifications, self.policy, self.trust, links)
+        freezable = frozenset(t.asset.key for t in self.registry.tokens() if t.issuer)
+        analyses, subject_risks = analyze(traces, verifications, self.policy, self.trust, links, freezable)
         scores = {s.endpoint_id: s for a in analyses for s in a.confidences}
         by_link = {link.id: link for link in links}
         via = {}

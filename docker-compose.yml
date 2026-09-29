@@ -1,0 +1,37 @@
+# One API process (with one embedded worker), N extra workers and one monitor share the
+# case database and evidence store on a volume. Scale workers with:
+#   docker compose up --scale worker=4
+services:
+  api:
+    build: .
+    command: ["anveshak", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["8000:8000"]
+    env_file: [{path: .env, required: false}]
+    environment:
+      ANVESHAK_EMBEDDED_WORKERS: "1"
+      ANVESHAK_MONITOR_INTERVAL: "0"      # the monitor service does this
+    volumes: [anveshak-var:/var/anveshak]
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["anveshak", "worker"]
+    env_file: [{path: .env, required: false}]
+    volumes: [anveshak-var:/var/anveshak]
+    depends_on: [api]
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  monitor:
+    build: .
+    command: ["anveshak", "monitor"]
+    env_file: [{path: .env, required: false}]
+    environment:
+      ANVESHAK_MONITOR_INTERVAL: "600"
+    volumes: [anveshak-var:/var/anveshak]
+    depends_on: [api]
+    restart: unless-stopped
+
+volumes:
+  anveshak-var: {}

@@ -4,86 +4,86 @@ Smart India Hackathon 2026 · Problem Statement **26182**: *Automated Attributio
 Cryptocurrency Wallets to Nearest Virtual Asset Service Providers (VASPs) through Blockchain
 Intelligence APIs.*
 
-Given a suspect wallet, Anveshak follows the money on-chain to the **nearest exchange or other
-service** it entered (and, backwards, the service that funded it). It says **who that service is, how
-well that is supported, and exactly which transactions prove the link**. It then drafts the
-disclosure or freeze request for an officer to approve on the Sahyog portal.
+Given a suspect wallet (reported on the Sahyog portal, or entered by an officer), Anveshak does the following:
+
+- It follows the money on-chain to the **nearest exchange or other service** it entered, across
+  **Bitcoin, Ethereum, BNB Chain, Polygon, Arbitrum, Base, OP Mainnet, Avalanche, Tron and Solana**.
+- It follows the money **across chains** through THORChain swaps.
+- Backwards, it finds the service that funded the wallet.
+- It says **who that service is, how well that is supported** (grade A/B/C/X and a 0–100
+  confidence score), **which deposit address** the funds entered, and **exactly which transactions
+  prove the link**. Every transaction is independently re-verified.
+- It classifies **wallet and flow risk**, detects **laundering typologies** (peel chains,
+  pass-through, fan-in/out, mixers, CoinJoin, chain-hopping), identifies **hot wallets, deposit
+  wallets and clusters**, and **alerts** on sanctions, ransomware, darknet, terrorism and fraud links.
+- It drafts **disclosure and freeze requests** for the right VASP, and **issuer freezes** when
+  stablecoins are still in place. An officer approves them for the Sahyog portal.
+- It **watches** addresses still holding traced funds and alerts the moment they move.
 
 ## Design principle: no guessing
 
-Anveshak produces **no ML scores, no probabilities, and no AI-generated text**. Every statement in
-its output is one of the following:
+No ML model, no probability and no AI-generated text is used anywhere in the evidence path.
+Every statement is one of the following:
 
 | kind | example | how you can check it |
 |---|---|---|
 | **Fact** | tx `3f…a1` moved 4,000 USDT from `TX…` to `TY…` in block 75,002,400 | re-verified against a second, transaction-level endpoint; the raw response is stored under its SHA-256 |
-| **Claim** | "`TY…` belongs to Binance", per Binance's own proof-of-reserves list | the label names its source, the class of that source, and the dataset record it came from |
-| **Inference** | grade **A** by rule **G-A1**; deposit-address pattern by rule **R-SWEEP** | a fixed, published rule applied to the facts and claims above |
+| **Claim** | "`TY…` belongs to Binance", per Binance's own proof-of-reserves page | the label names its source. "Entity-attested" counts only on the entity's official channel, and "authority" only on a government domain |
+| **Inference** | grade **A** (rule G-A1), confidence **96/100**, deposit address by rule **R-SWEEP** | a fixed, published rule, itemised point by point |
 
-If none of these apply, the answer is **unknown**, and the report says what was not examined.
-Attribution **grades** (A attested · B corroborated · C single-source · X conflicted) come from
-*who* makes a claim and *whether independent sources agree*. They are not probabilities.
-See [ADR-0002](docs/adr/0002-no-probabilistic-scores.md).
+If none of these apply, the answer is **unknown**, and each trace reports what it did not examine.
+The **confidence score** the PS asks for is a points rubric (attribution evidence + path
+verification + proximity + corroboration), with weights in a versioned policy file. It ranks
+evidence strength. **It is not a probability.** See [ADR-0002](docs/adr/0002-no-probabilistic-scores.md)
+and [ADR-0012](docs/adr/0012-scoring-policy.md).
 
 ## Quick start
 
 ```bash
 uv venv .venv && uv pip install -e ".[dev]"
-.venv/Scripts/anveshak demo            # synthetic scenario (fictional data, watermarked)
-.venv/Scripts/anveshak serve           # dashboard + API at http://127.0.0.1:8000
+.venv/Scripts/anveshak demo            # synthetic scenario covering every rule (watermarked, not evidence)
+.venv/Scripts/anveshak serve           # dashboard + API + workers at http://127.0.0.1:8000
 ```
 
 Live tracing uses public APIs. Copy `.env.example` to `.env`:
 
-| chain | source | key |
+| chains | source | key |
 |---|---|---|
 | Tron | TronGrid | optional (`TRONGRID_API_KEY`), rate-limited without one |
 | Bitcoin | Esplora (blockstream.info) | none |
-| Ethereum, Polygon | Etherscan API V2 | `ETHERSCAN_API_KEY` (free tier) |
-| BNB Smart Chain | Etherscan API V2 | paid Etherscan plan, or any Etherscan-compatible `ETHERSCAN_BASE_URL` |
+| Solana | any JSON-RPC (`SOLANA_RPC_URL`) | public endpoint works, but slowly |
+| Ethereum, Polygon, Arbitrum | Etherscan API V2 | `ETHERSCAN_API_KEY` (free tier) |
+| BNB Chain, Base, OP Mainnet, Avalanche | Etherscan API V2 | paid plan, or an Etherscan-compatible `ETHERSCAN_BASE_URL` |
+| cross-chain | THORChain Midgard (public gateway) | none |
+| intelligence (optional) | Chainalysis sanctions API, Etherscan name tags | `CHAINALYSIS_API_KEY`, `ETHERSCAN_NAMETAGS=1` |
 
 ```bash
 anveshak trace --chain tron --address T... --case-ref "FIR 123/2026" --direction both
 anveshak replay <case_id>              # re-run from stored evidence; the findings hash must match
-anveshak labels import graphsense      # refresh public label datasets
-anveshak labels import ofac
+anveshak worker                        # extra worker process (shares the case queue)
+anveshak monitor --once                # check watched addresses now
+anveshak export <case_id> --format neo4j
+anveshak labels import graphsense | ofac
 anveshak labels attest --chain tron --address T... --entity-id binance --entity-name Binance \
     --document-ref "Sahyog reply REF-123 dated 2026-10-02" --as-of 2026-10-02
+docker compose up --scale worker=4
 ```
-
-`attest` is the feedback loop. When a VASP confirms an address in its reply, that address becomes
-a grade-A label for every future case.
-
-## What it does
-
-- **Chains:** Bitcoin, Ethereum, BNB Smart Chain, Polygon, Tron (native coins, plus USDT/USDC by
-  verified contract address).
-- **Tracing:** forward ("where did the money go") and backward ("who funded this wallet"). Paths
-  follow time order, stop after a fixed number of hops, and stop at services. Search limits are
-  reported, not hidden.
-- **Recognising services:** labels (GraphSense TagPacks, OFAC SDN, investigator attestations) are
-  graded by fixed rules. It also detects Bitcoin co-spend with an exchange wallet, EVM same-key
-  addresses, the account-chain deposit-sweep pattern, and CoinJoin structure.
-- **Stopping points:** VASPs, mixers, bridges and DeFi contracts, unlabelled contracts,
-  high-activity addresses, and addresses where funds are still sitting (with the current balance).
-- **Verification:** every transfer on a reported path is re-checked against a transaction-level
-  endpoint (EVM JSON-RPC receipts, Tron full-node API, Esplora tx).
-- **Routing:** request drafts grouped by VASP. A draft is `ready_for_approval` only if it has a
-  fully verified path, a grade A/B attribution, and a verified contact channel. Freeze-review
-  suggestions go to stablecoin issuers when USDT/USDC is still in place. Nothing is sent without an
-  officer's approval.
-- **Report:** a print-ready HTML report with the evidence manifest and a BSA 2023 s.63 certificate
-  template. Its SHA-256 is written alongside it.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md): modules, data flow, extension points
-- [Decision records (ADRs)](docs/adr/): why it is built this way
-- [References](docs/references.md): every paper, dataset, API and source used, and where
-- [Limitations](docs/architecture.md#known-limitations)
+- [Requirements traceability](docs/requirements-traceability.md): every PS clause → code → test → status
+- [Architecture](docs/architecture.md): pipeline, modules, security, known limitations
+- [Sahyog integration guide](docs/sahyog-integration.md): API contract, callbacks, approval
+- [Decision records](docs/adr/): 18 ADRs
+- [References](docs/references.md): every paper, dataset, API and standard used, and where
 
 ## Tests
 
 ```bash
 .venv/Scripts/python -m pytest
 ```
+
+The suite covers the checksum test vectors (BIP-173/350, EIP-55, real Tron pairs, live Solana
+token accounts) and every grading and scoring rule. It covers the adapters against real
+response shapes, verification mismatch handling, and evidence replay reproducing the findings
+hash. It covers the queue, watchlist, ingestion and API.
