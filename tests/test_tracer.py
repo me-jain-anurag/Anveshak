@@ -1,0 +1,147 @@
+"""Tracer guarantees: time order, exclusions are counted, limits are reported, endpoints are correct."""
+
+from anveshak import demo
+from anveshak.attribution import Attributor
+from anveshak.chain import Chain
+from anveshak.chains.memory import MemorySource
+from anveshak.domain import Category, Direction, EndpointKind, Grade, SourceClass
+from anveshak.labels.store import LabelStore
+from anveshak.tracer import TraceParams, Tracer
+
+from .conftest import label, xfer
+
+T = demo.tron_addr
+U = 1_000_000
+
+
+def _usdt(registry):
+    return registry.token(Chain.TRON, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDT", 6)
+
+
+def _trace(registry, transfers, labels=(), direction=Direction.OUT, subject=None, **params):
+    src = MemorySource(Chain.TRON, transfers, **{k: params.pop(k) for k in ("contracts", "balances", "incomplete") if k in params})
+    tracer = Tracer(src, Attributor(LabelStore(list(labels))), registry)
+    return tracer.trace(subject or T("s"), TraceParams(direction=direction, **params))
+
+
+def kinds(result):
+    return sorted((e.kind.value, e.address) for e in result.endpoints)
+
+
+def test_transfer_before_arrival_is_not_followed(registry):
+    usdt = _usdt(registry)
+    r = _trace(registry, [xfer(usdt, T("h"), T("decoy"), 5 * U, -10), xfer(usdt, T("s"), T("h"), 10 * U, 0), xfer(usdt, T("h"), T("next"), 9 * U, 5)])
+    followed = {t.receiver for t in r.transfers}
+    assert T("next") in followed and T("decoy") not in followed
+    assert r.coverage.excluded_time_order == 1
+
+
+def test_backward_trace_only_uses_earlier_funding(registry):
+    usdt = _usdt(registry)
+    r = _trace(
+        registry,
+        [xfer(usdt, T("funder"), T("s"), 10 * U, 0), xfer(usdt, T("s"), T("out"), 9 * U, 10), xfer(usdt, T("late"), T("funder"), 3 * U, 20)],
+        direction=Direction.IN,
+    )
+    assert (EndpointKind.ORIGIN.value, T("funder")) in kinds(r)
+    assert r.coverage.excluded_time_order == 1  # "late" funded the funder only after it paid the subject
+
+
+def test_dust_unverified_token_and_asset_switch_are_counted_not_followed(registry):
+    usdt = _usdt(registry)
+    fake = registry.token(Chain.TRON, T("fake-contract"), "USDT", 6)
+    trx = registry.native(Chain.TRON)
+    r = _trace(
+        registry,
+        [
+            xfer(usdt, T("s"), T("dust"), U // 10, 1),
+            xfer(fake, T("s"), T("fake"), 100 * U, 2),
+            xfer(usdt, T("s"), T("h"), 50 * U, 3),
+            xfer(trx, T("h"), T("trx-out"), 100 * U, 4),  # different asset than what arrived
+        ],
+    )
+    c = r.coverage
+    assert (c.excluded_dust, c.excluded_unverified_asset, c.excluded_other_asset) == (1, 1, 1)
+    assert not fake.verified and fake.symbol == "USDT?"
+
+
+def test_service_endpoint_stops_path_and_carries_attribution(registry):
+    usdt = _usdt(registry)
+    labels = [label(Chain.TRON, T("hot"), SourceClass.ENTITY_ATTESTED, "https://ex1.example/por")]
+    r = _trace(registry, [xfer(usdt, T("s"), T("dep"), 10 * U, 1), xfer(usdt, T("dep"), T("hot"), 10 * U, 2), xfer(usdt, T("hot"), T("beyond"), 10 * U, 3)], labels)
+    vasp = [e for e in r.endpoints if e.kind is EndpointKind.VASP]
+    assert len(vasp) == 1 and vasp[0].address == T("hot") and vasp[0].attribution.grade is Grade.A
+    assert vasp[0].adjacent_address == T("dep") and "R-SWEEP" in vasp[0].adjacent_role
+    assert T("beyond") not in {t.receiver for t in r.transfers}  # never follow inside a service
+
+
+def test_sweep_role_not_claimed_when_address_also_pays_elsewhere(registry):
+    usdt = _usdt(registry)
+    labels = [label(Chain.TRON, T("hot"), SourceClass.ENTITY_ATTESTED, "https://ex1.example/por")]
+    r = _trace(
+        registry,
+        [xfer(usdt, T("s"), T("dep"), 10 * U, 1), xfer(usdt, T("dep"), T("hot"), 6 * U, 2), xfer(usdt, T("dep"), T("friend"), 4 * U, 3)],
+        labels,
+    )
+    vasp = next(e for e in r.endpoints if e.kind is EndpointKind.VASP)
+    assert vasp.adjacent_role is None
+
+
+def test_mixer_is_a_service_endpoint(registry):
+    usdt = _usdt(registry)
+    labels = [label(Chain.TRON, T("mix"), SourceClass.CURATED, "https://a.example", entity="mx", category=Category.MIXER)]
+    r = _trace(registry, [xfer(usdt, T("s"), T("mix"), 10 * U, 1)], labels)
+    assert kinds(r) == [(EndpointKind.SERVICE.value, T("mix"))]
+
+
+def test_hop_limit_and_budget_are_reported(registry):
+    usdt = _usdt(registry)
+    chain = [xfer(usdt, T(f"n{i}"), T(f"n{i + 1}"), 10 * U, i) for i in range(6)]
+    r = _trace(registry, chain, subject=T("n0"), max_hops=3)
+    assert (EndpointKind.HOP_LIMIT.value, T("n3")) in kinds(r)
+    r2 = _trace(registry, chain, subject=T("n0"), max_hops=10, max_expansions=2)
+    assert r2.coverage.budget_exhausted
+    assert any(e.kind is EndpointKind.NOT_EXPANDED for e in r2.endpoints)
+
+
+def test_branch_pruning_keeps_largest_and_is_recorded(registry):
+    usdt = _usdt(registry)
+    fan = [xfer(usdt, T("s"), T(f"r{i}"), (i + 2) * U, i) for i in range(5)]
+    r = _trace(registry, fan, max_branch=2)
+    assert r.coverage.pruned[0].candidates == 5 and r.coverage.pruned[0].kept == 2
+    assert {t.receiver for t in r.transfers} == {T("r4"), T("r3")}
+
+
+def test_incomplete_history_becomes_high_activity_endpoint(registry):
+    usdt = _usdt(registry)
+    r = _trace(registry, [xfer(usdt, T("s"), T("busy"), 10 * U, 1)], incomplete={T("busy")})
+    assert (EndpointKind.HIGH_ACTIVITY.value, T("busy")) in kinds(r)
+
+
+def test_dormant_endpoint_gets_balance(registry):
+    usdt = _usdt(registry)
+    r = _trace(registry, [xfer(usdt, T("s"), T("park"), 10 * U, 1)], balances={(T("park"), usdt.key): 10 * U})
+    assert kinds(r) == [(EndpointKind.DORMANT.value, T("park"))]
+    assert r.balances[0].amount == 10 * U
+
+
+def test_subject_that_never_moved_funds_is_dormant_with_balance(registry):
+    usdt = _usdt(registry)
+    r = _trace(registry, [xfer(usdt, T("victim"), T("s"), 10 * U, 1)], balances={(T("s"), usdt.key): 10 * U})
+    assert kinds(r) == [(EndpointKind.DORMANT.value, T("s"))]
+    assert r.endpoints[0].hops == 0 and r.balances[0].address == T("s")
+
+
+def test_bottleneck_is_smallest_transfer_on_path(registry):
+    usdt = _usdt(registry)
+    r = _trace(registry, [xfer(usdt, T("s"), T("a"), 100 * U, 1), xfer(usdt, T("a"), T("b"), 30 * U, 2)])
+    end = next(e for e in r.endpoints if e.address == T("b"))
+    assert end.bottleneck.amount == 30 * U
+
+
+def test_trace_is_deterministic(registry):
+    src = demo.sources(registry)[Chain.TRON]
+    tracer = Tracer(src, Attributor(demo.labels()), registry)
+    a = tracer.trace(demo.T["suspect"], TraceParams())
+    b = tracer.trace(demo.T["suspect"], TraceParams())
+    assert a.model_dump_json() == b.model_dump_json()

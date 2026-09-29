@@ -1,0 +1,22 @@
+# Public-authority domains (ADR-0005).
+#
+# A label may claim source class `authority` only if its primary source is hosted on one of
+# these domains (exact host or a subdomain). Otherwise the claim is treated as `curated`.
+# Only add domains whose registration is restricted to government bodies, or the specific
+# host of a named authority.
+
+domains:
+  - domain: treasury.gov
+    name: U.S. Department of the Treasury (incl. OFAC press releases)
+  - domain: treas.gov
+    name: U.S. Treasury — OFAC Sanctions List Search (sanctionssearch.ofac.treas.gov)
+  - domain: fbi.gov
+    name: U.S. Federal Bureau of Investigation
+  - domain: justice.gov
+    name: U.S. Department of Justice
+  - domain: gov.in
+    name: Government of India (registration restricted to government bodies)
+  - domain: nic.in
+    name: Government of India, NIC-hosted sites
+  - domain: gov.uk
+    name: Government of the United Kingdom

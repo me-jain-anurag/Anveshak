@@ -1,0 +1,71 @@
+# Verified asset registry (ADR-0007).
+#
+# A token is identified by (chain, contract) — never by its symbol, which anyone can copy
+# ("fake USDT" contracts are a common scam tool). Only tokens listed here are marked
+# `verified` and followed by the tracer by default.
+#
+# Every entry cites where the contract address and decimals were checked. Entries were
+# verified on 2026-09-30 against CoinGecko's coin API (`detail_platforms`).
+# To add an entry: verify the contract on the issuer's own page AND an independent source,
+# then add both links below. Do not add entries without a cited source.
+#
+# min_amount: dust threshold in base units. Transfers below it are not followed (reported
+# as excluded in the coverage section, never silently dropped).
+
+native:
+  bitcoin:  {min_amount: 10000}                 # 0.0001 BTC
+  ethereum: {min_amount: 1000000000000000}      # 0.001 ETH
+  bsc:      {min_amount: 1000000000000000}      # 0.001 BNB
+  polygon:  {min_amount: 1000000000000000000}   # 1 POL
+  tron:     {min_amount: 1000000}               # 1 TRX
+
+tokens:
+  - chain: ethereum
+    contract: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    symbol: USDT
+    decimals: 6
+    issuer: tether
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/tether"]
+  - chain: tron
+    contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+    symbol: USDT
+    decimals: 6
+    issuer: tether
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/tether"]
+  - chain: bsc
+    contract: "0x55d398326f99059ff775485246999027b3197955"
+    symbol: USDT
+    decimals: 18          # note: 18, not 6, on BNB Smart Chain
+    issuer: tether
+    min_amount: 1000000000000000000
+    sources: ["https://api.coingecko.com/api/v3/coins/binance-bridged-usdt-bnb-smart-chain"]
+  - chain: ethereum
+    contract: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: tron
+    contract: "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: polygon
+    contract: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"
+    symbol: USDC
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/usd-coin"]
+  - chain: polygon
+    contract: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"
+    symbol: USDC.e
+    decimals: 6
+    issuer: circle
+    min_amount: 1000000
+    sources: ["https://api.coingecko.com/api/v3/coins/bridged-usdc-polygon-pos-bridge"]

@@ -1,0 +1,144 @@
+# VASP / stablecoin-issuer directory used for routing (ADR-0010).
+#
+# RULES FOR EDITING
+#  * Every channel and every fact needs `source` (a URL you opened) and `checked` (date).
+#  * Contact details need a cited source. An entity with no verified channel is fine —
+#    routing to it simply requires analyst review.
+#  * `aliases` map dataset-specific entity ids (e.g. GraphSense actor ids) to `entity_id`.
+#  * Facts marked `note: secondary source` came from press/aggregator articles; confirm them
+#    on the primary source (fiuindia.gov.in, the Sahyog portal) before relying on them.
+#
+#  * `official_sources` are the entity's own publication channels (domain, or domain/path for a
+#    social account). Labels that claim to come from the entity count as entity-attested only
+#    when their primary source is on one of these. Unverified channels are left out on purpose
+#    (e.g. bybithelp.com and github.com/bitfinexcom could not be confirmed on 2026-09-30).
+#
+# Initial entries checked 2026-09-30.
+
+entities:
+  - entity_id: binance
+    display_name: Binance
+    role: vasp
+    official_sources: [binance.com]
+    aliases: [binance.com]
+    channels:
+      - name: Binance Government Law Enforcement Request System
+        url: https://www.binance.com/en/support/law-enforcement
+        source: https://www.binance.com/en/support/law-enforcement
+        checked: 2026-09-30
+    fiu_ind_registered:
+      value: true
+      source: https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/
+      checked: 2026-09-30
+      note: secondary source — confirm on fiuindia.gov.in
+
+  - entity_id: cryptocom
+    display_name: Crypto.com
+    role: vasp
+    official_sources: [crypto.com, twitter.com/cryptocom, x.com/cryptocom]
+    aliases: [crypto.com]
+    channels:
+      - name: Crypto.com law-enforcement contact (help centre)
+        url: https://help.crypto.com/en/articles/1360625-how-can-law-enforcement-agencies-get-in-touch-with-crypto-com
+        source: https://help.crypto.com/en/articles/1360625-how-can-law-enforcement-agencies-get-in-touch-with-crypto-com
+        checked: 2026-09-30
+
+  - entity_id: coinbase
+    display_name: Coinbase
+    role: vasp
+    official_sources: [coinbase.com]
+    channels:
+      - name: Kodex law-enforcement request platform (used by Coinbase)
+        url: https://www.kodexglobal.com/
+        source: https://www.kodexglobal.com/customer-stories/coinbase
+        checked: 2026-09-30
+
+  - entity_id: bitget
+    display_name: Bitget
+    role: vasp
+    official_sources: [bitget.com]
+    sahyog_onboarded:
+      value: true
+      source: https://www.globenewswire.com/news-release/2025/06/23/3103143/0/en/Bitget-Onboards-on-India-s-I4C-s-Sahyog-Portal-to-Support-Local-Law-Enforcement.html
+      checked: 2026-09-30
+      note: company press release (2025-06-23)
+
+  - entity_id: okex
+    display_name: OKX
+    role: vasp
+    official_sources: [okx.com, twitter.com/okx, x.com/okx]
+    aliases: [okx]
+
+  - entity_id: huobi
+    display_name: HTX (Huobi)
+    role: vasp
+    official_sources: [huobi.com]
+    aliases: [htx]
+
+  - entity_id: kucoin
+    display_name: KuCoin
+    role: vasp
+    official_sources: [kucoin.com]
+
+  - entity_id: bybit
+    display_name: Bybit
+    role: vasp
+    official_sources: [bybit.com]
+
+  - entity_id: bitfinex
+    display_name: Bitfinex
+    role: vasp
+    official_sources: [bitfinex.com]
+    aliases: [bitfinexcom]
+
+  - entity_id: deribit
+    display_name: Deribit
+    role: vasp
+    official_sources: [deribit.com]
+
+  - entity_id: swissborg
+    display_name: SwissBorg
+    role: vasp
+    official_sources: [swissborg.com]
+
+  - entity_id: kraken
+    display_name: Kraken
+    role: vasp
+    official_sources: [kraken.com]
+
+  # Indian VASPs. No on-chain labels are shipped for these yet: add them as investigator
+  # attestations (see docs) as replies to Sahyog requests come in.
+  - entity_id: wazirx
+    display_name: WazirX
+    role: vasp
+    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+  - entity_id: coindcx
+    display_name: CoinDCX
+    role: vasp
+    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+  - entity_id: zebpay
+    display_name: ZebPay
+    role: vasp
+    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+  - entity_id: coinswitch
+    display_name: CoinSwitch
+    role: vasp
+    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+  - entity_id: mudrex
+    display_name: Mudrex
+    role: vasp
+    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+
+  # Stablecoin issuers — targets for freeze-review suggestions (token balance still in place).
+  - entity_id: tether
+    display_name: Tether (USDT issuer)
+    role: stablecoin_issuer
+    channels:
+      - name: T3 Financial Crime Unit (Tether, TRON, TRM Labs) — USDT on TRON
+        url: https://t3fcu.org/
+        source: https://t3fcu.org/
+        checked: 2026-09-30
+
+  - entity_id: circle
+    display_name: Circle (USDC issuer)
+    role: stablecoin_issuer

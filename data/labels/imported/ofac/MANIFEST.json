@@ -1,0 +1,41 @@
+{
+  "source_id": "ofac-sdn-0xb10c",
+  "imported_at": "2026-09-29T19:36:53.867496+00:00",
+  "files": [
+    {
+      "ticker": "XBT",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_XBT.json",
+      "sha256": "d4299f5afe07a10363b50a675329d390a1cc4b185de40ecb4a2fc2051a6e50bc",
+      "kept": 532,
+      "skipped": {}
+    },
+    {
+      "ticker": "ETH",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_ETH.json",
+      "sha256": "9fd366643773ef7eb31aee1d8997e3110fc42c7121ea35ef8270f1f8bba24ebc",
+      "kept": 360,
+      "skipped": {}
+    },
+    {
+      "ticker": "TRX",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_TRX.json",
+      "sha256": "7418da8067091409c7a80bf9bde96998174633848e63a419410e316f06c299be",
+      "kept": 254,
+      "skipped": {}
+    },
+    {
+      "ticker": "USDT",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_USDT.json",
+      "sha256": "6d01dbbbb2ea002ef93bf1897dc59fa9f9dceb0b7ce6313f57b041e25e5ab649",
+      "kept": 110,
+      "skipped": {}
+    },
+    {
+      "ticker": "USDC",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_USDC.json",
+      "sha256": "be0847511ce39fee6f27a3843f5f759819c606ab71136ca651e425c6d6f27f7d",
+      "kept": 6,
+      "skipped": {}
+    }
+  ]
+}
