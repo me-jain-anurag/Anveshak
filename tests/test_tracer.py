@@ -145,3 +145,18 @@ def test_trace_is_deterministic(registry):
     a = tracer.trace(demo.T["suspect"], TraceParams())
     b = tracer.trace(demo.T["suspect"], TraceParams())
     assert a.model_dump_json() == b.model_dump_json()
+
+
+def test_only_issuer_assets_raise_freeze_opportunity(registry):
+    from anveshak.risk import alerts_for
+
+    usdt = _usdt(registry)
+    trx = registry.native(Chain.TRON)
+    r = _trace(
+        registry,
+        [xfer(usdt, T("s"), T("a"), 10 * U, 1), xfer(trx, T("s"), T("b"), 10 * U, 2)],
+        balances={(T("a"), usdt.key): 10 * U, (T("b"), trx.key): 10 * U},
+    )
+    freezable = frozenset(t.asset.key for t in registry.tokens() if t.issuer)
+    rules = {(a.rule, a.addresses[0]) for a in alerts_for(r, None, freezable)}
+    assert ("A-FREEZE-OPPORTUNITY", T("a")) in rules and ("A-FUNDS-HELD", T("b")) in rules

@@ -185,7 +185,9 @@ def flow_risks(trace: TraceResult, typologies: list[TypologyHit], policy: Scorin
     return out
 
 
-def alerts_for(trace: TraceResult, subject_risk: RiskAssessment | None) -> list[Alert]:
+def alerts_for(trace: TraceResult, subject_risk: RiskAssessment | None, freezable_assets: frozenset[str] = frozenset()) -> list[Alert]:
+    """`freezable_assets`: asset keys whose issuer can freeze balances (e.g. USDT, USDC). Only
+    those make an unhosted balance a freeze opportunity; anything else is "funds held"."""
     alerts: list[Alert] = []
     for hit in trace.risks:
         for flag in hit.flags:
@@ -199,14 +201,26 @@ def alerts_for(trace: TraceResult, subject_risk: RiskAssessment | None) -> list[
             where = "the subject" if on_subject else "an address on a traced path"
             alerts.append(Alert(severity=severity, rule=rule, chain=trace.chain.value, addresses=(hit.address,), message=f"{flag.replace('_', ' ')} flag on {where}: {hit.address}"))
     for bal in trace.balances:
-        if bal.amount > 0:
+        if bal.amount <= 0:
+            continue
+        if bal.asset_key in freezable_assets:
             alerts.append(
                 Alert(
                     severity=AlertSeverity.HIGH,
                     rule="A-FREEZE-OPPORTUNITY",
                     chain=trace.chain.value,
                     addresses=(bal.address,),
-                    message=f"{bal.formatted} still held at {bal.address} ({bal.as_of}) — freeze window may be open",
+                    message=f"{bal.formatted} still held at {bal.address} ({bal.as_of}) — the issuer can freeze it; act before it moves",
+                )
+            )
+        else:
+            alerts.append(
+                Alert(
+                    severity=AlertSeverity.MEDIUM,
+                    rule="A-FUNDS-HELD",
+                    chain=trace.chain.value,
+                    addresses=(bal.address,),
+                    message=f"{bal.formatted} still held at {bal.address} ({bal.as_of}) — no issuer freeze possible; watched for movement",
                 )
             )
     for e in trace.endpoints:

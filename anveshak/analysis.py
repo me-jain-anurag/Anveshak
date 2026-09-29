@@ -99,6 +99,7 @@ def analyze(
     policy: ScoringPolicy,
     trust: SourceTrust | None,
     links: list[CrossChainLink] | None = None,
+    freezable_assets: frozenset[str] = frozenset(),
 ) -> tuple[list[TraceAnalysis], list[RiskAssessment]]:
     per_trace = []
     for trace in traces:
@@ -131,7 +132,7 @@ def analyze(
                 flow_risks=tuple(flow_risks(trace, hits, policy, trust)),
                 profiles=tuple(profiles),
                 clusters=tuple(clusters),
-                alerts=tuple(alerts_for(trace, subject_risks[(trace.chain.value, trace.subject)])),
+                alerts=tuple(alerts_for(trace, subject_risks[(trace.chain.value, trace.subject)], freezable_assets)),
             )
         )
     return analyses, [subject_risks[k] for k in subjects]

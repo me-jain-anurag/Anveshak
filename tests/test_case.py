@@ -64,7 +64,7 @@ def test_demo_analysis_outputs(demo_engine, demo_request):
     assert any(c.kind == "entity" and c.entity_id == "demo-alpha" for c in tron_out.clusters)
     tron_risk = next(x for x in r.findings.subject_risks if x.chain == "tron")
     assert tron_risk.level in ("medium", "high", "severe") and tron_risk.score > 0
-    assert any(a.rule == "A-FREEZE-OPPORTUNITY" for a in tron_out.alerts)
+    assert any(a.rule == "A-FREEZE-OPPORTUNITY" for a in tron_out.alerts)  # USDT: issuer can freeze
     btc_out = next(a for a in r.findings.analyses if a.chain == "bitcoin" and a.direction == "out")
     subject_cluster = next(c for c in btc_out.clusters if c.kind == "multi_input" and c.contains_subject)
     assert {m.address for m in subject_cluster.members} == {demo.B["suspect"], demo.B["suspect-2"]}

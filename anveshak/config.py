@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
+# Reference data (labels, asset registry, directory, policies). Overridable for installed deployments.
+DATA_DIR = Path(os.environ.get("ANVESHAK_DATA_DIR", str(PROJECT_ROOT / "data")))
 
 
 def _load_dotenv(path: Path) -> None:
