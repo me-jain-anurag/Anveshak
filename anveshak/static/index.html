@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anveshak — VASP attribution</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div>
+    <strong>Anveshak</strong>
+    <span class="muted">evidence-first wallet → VASP attribution</span>
+  </div>
+  <div id="meta" class="muted small"></div>
+</header>
+
+<div class="layout">
+  <aside>
+    <section class="card">
+      <h2>New case</h2>
+      <form id="case-form">
+        <label>Case reference <input name="case_reference" required placeholder="e.g. FIR 123/2026, Cyber PS"></label>
+        <label>Chain
+          <select name="chain">
+            <option value="tron">Tron</option>
+            <option value="ethereum">Ethereum</option>
+            <option value="bsc">BNB Smart Chain</option>
+            <option value="polygon">Polygon</option>
+            <option value="bitcoin">Bitcoin</option>
+          </select>
+        </label>
+        <label>Subject address <input name="address" required autocomplete="off" spellcheck="false" placeholder="wallet address"></label>
+        <fieldset class="row">
+          <label class="inline"><input type="checkbox" name="out" checked> funds out</label>
+          <label class="inline"><input type="checkbox" name="in" checked> funding in</label>
+        </fieldset>
+        <div class="row">
+          <label>Max hops <input name="max_hops" type="number" min="1" max="10" value="4"></label>
+          <label>Budget <input name="max_expansions" type="number" min="1" max="5000" value="60"></label>
+        </div>
+        <label>Since (optional) <input name="since" type="datetime-local"></label>
+        <button type="submit">Run live trace</button>
+        <p id="form-error" class="error"></p>
+      </form>
+      <button id="demo-btn" class="secondary">Run synthetic demo</button>
+      <p class="small muted">The demo uses fictional data and is watermarked "not evidence".</p>
+    </section>
+
+    <section class="card">
+      <h2>Address lookup</h2>
+      <form id="lookup-form" class="row">
+        <select name="chain">
+          <option value="tron">Tron</option><option value="ethereum">Ethereum</option><option value="bsc">BSC</option>
+          <option value="polygon">Polygon</option><option value="bitcoin">Bitcoin</option>
+        </select>
+        <input name="address" required placeholder="address" spellcheck="false">
+        <button type="submit">Look up</button>
+      </form>
+      <div id="lookup-out" class="small"></div>
+    </section>
+
+    <section class="card">
+      <h2>Cases</h2>
+      <ul id="cases" class="cases"></ul>
+    </section>
+  </aside>
+
+  <main id="main">
+    <div class="empty muted">Select or run a case.</div>
+  </main>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

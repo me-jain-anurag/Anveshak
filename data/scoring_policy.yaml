@@ -1,0 +1,93 @@
+# Scoring policy (ADR-0012). Versioned configuration, not code.
+#
+# Both scores below are INTEGER POINTS awarded for explicit, listed pieces of evidence.
+# They rank findings by strength of evidence. They are NOT probabilities: a confidence
+# of 85 does not mean "85% likely". Every report prints the itemised points and the hash
+# of this file, so any score can be recomputed by hand.
+#
+# Changing any value changes the policy hash recorded in new cases. Old cases keep the
+# hash of the policy they were scored under.
+
+version: "1.0"
+
+confidence:
+  # "Value traced from the subject reached an address controlled by entity E."
+  attribution:                  # who says the endpoint address belongs to E   (max 60)
+    entity_attested: 60         # E itself (official channel) or a formal VASP reply
+    authority: 55               # a public authority on an allow-listed domain
+    curated_first: 30           # first curated source
+    curated_each_additional: 15 # each further curated source with a different primary source
+    curated_cap: 50
+    weak_only: 10               # only web crawls / heuristics / unknown provenance
+    derived_penalty: 15         # D-COSPEND, D-EVM-KEY: the anchor's points minus this
+    derived_cap: 45
+  path:                         # independent re-verification of every transfer (max 25)
+    all_verified: 25
+    some_unverifiable: 10       # e.g. EVM internal transfers, which receipts cannot show
+    some_error: 5               # the check could not complete
+  proximity:                    # hops from the subject (max 10) — fewer hops, fewer assumptions
+    by_hops: {1: 10, 2: 8, 3: 6, 4: 4, 5: 2}
+    beyond: 0
+  corroboration:                # on-chain behaviour consistent with the attribution (max 5)
+    deposit_sweep_pattern: 5    # R-SWEEP observed at the address that paid E
+  bands:                        # checked top-down; first match wins
+    - {min: 80, band: high}
+    - {min: 60, band: moderate}
+    - {min: 40, band: low}
+    - {min: 0, band: very_low}
+  # Hard rules (not configurable): grade X (conflicting owners) → 0; any MISMATCH on the path → 0.
+
+risk:
+  flag_points:                  # a flag on the address itself
+    sanctioned: 100
+    terrorism: 100
+    ransomware: 90
+    dark_web: 80
+    hack: 80
+    extremism: 80
+    scam: 70
+    investment_fraud: 70
+    phishing: 70
+    ponzi: 70
+    extortion: 70
+    issuer_frozen: 60
+  flag_source_percent:          # share of flag points by who raised the flag (after the source-trust check)
+    authority: 100
+    entity_attested: 100
+    curated: 75
+    weak: 25
+  exposure_percent_by_hops:     # share of the flag points applied at each distance from the subject
+    1: 80
+    2: 60
+    3: 40
+    4: 20
+    beyond: 10
+  service_points:               # a traced path reaching these services (then decayed as above)
+    mixer: 60
+    market: 60
+    gambling: 20
+    bridge: 20
+    coinjoin: 50
+  typology_points:
+    peel_chain: 15
+    rapid_pass_through: 10
+    fan_out: 10
+    fan_in: 10
+    chain_hopping: 15
+  typology_cap: 30
+  levels:
+    - {min: 80, level: severe}
+    - {min: 60, level: high}
+    - {min: 40, level: medium}
+    - {min: 1, level: low}
+    - {min: 0, level: none_observed}   # "no indicators observed" — never "clean"
+
+routing:
+  ready_min_confidence: 60      # disclosure drafts below this need analyst review even at grade A/B
+  freeze_min_confidence: 70     # freeze drafts to a VASP need at least this
+
+typologies:
+  rapid_pass_through: {max_minutes: 60, min_forward_percent: 90}
+  fan_out: {min_recipients: 5, window_hours: 24}
+  fan_in: {min_senders: 5, window_hours: 24}
+  peel_chain: {min_steps: 3, min_keep_percent: 50}

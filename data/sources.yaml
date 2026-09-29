@@ -1,0 +1,38 @@
+# Label datasets the system knows about (ADR-0005).
+#
+# Every label records which dataset it came from (`source_id`) and which class of claimant
+# stands behind it (`source_class`). The class — not a number — is what grading uses:
+#
+#   entity_attested  the entity itself (its proof-of-reserves list, its reply to an LEA request)
+#   authority        a public authority (OFAC, a court order, an LEA seizure record)
+#   curated          a third-party curated dataset whose record cites a dereferenceable source
+#   weak             web crawls, heuristics, unknown provenance
+#
+# `class: per-record` means the importer assigns the class per record from the dataset's own
+# provenance field (see the mapping table in anveshak/labels/importers.py).
+
+sources:
+  graphsense-tagpacks:
+    name: GraphSense public TagPacks
+    url: https://github.com/graphsense/graphsense-tagpacks
+    license: MIT
+    class: per-record   # from each TagPack's `confidence` field
+
+  ofac-sdn-0xb10c:
+    name: OFAC SDN digital currency addresses, extracted nightly by 0xB10C
+    url: https://github.com/0xB10C/ofac-sanctioned-digital-currency-addresses
+    license: MIT
+    class: authority
+
+  investigator:
+    name: Labels recorded by investigators (e.g. a VASP's written reply to a Sahyog request)
+    url: null
+    license: internal
+    class: per-record   # entity_attested for VASP replies; authority for seizure/court records
+
+  demo:
+    name: SYNTHETIC demo labels — fictional entities, never valid in a live case
+    url: null
+    license: internal
+    class: per-record
+    synthetic: true

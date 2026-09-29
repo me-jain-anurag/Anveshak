@@ -1,0 +1,287 @@
+{
+  "source_id": "graphsense-tagpacks",
+  "imported_at": "2026-09-29T19:37:59.521026+00:00",
+  "files": [
+    {
+      "pack": "exchange-wallets-binance.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-binance.yaml",
+      "sha256": "e706166f2c74b23c80f79e4a93f85cb7f7fc80829a5be70409201ea4b5d4b944",
+      "kept": 61,
+      "skipped": {
+        "unsupported network bep2": 25
+      }
+    },
+    {
+      "pack": "exchange-wallets-bitfinexcom.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-bitfinexcom.yaml",
+      "sha256": "7062aada676d7a043318f805a8f4b1f311e9c7747cc5120f353f75708391f460",
+      "kept": 14,
+      "skipped": {
+        "unsupported network avax": 4,
+        "unsupported network ada": 2,
+        "unsupported network algo": 2,
+        "unsupported network aion": 1,
+        "unsupported network apt": 1,
+        "unsupported network atlas": 2,
+        "unsupported network bch": 3,
+        "unsupported network bsv": 2,
+        "unsupported network blockstream": 1,
+        "unsupported network callisto": 1,
+        "unsupported network certik": 1,
+        "unsupported network atom": 2,
+        "unsupported network dash": 2,
+        "unsupported network dfinity": 1,
+        "unsupported network elrond": 1,
+        "unsupported network eos": 9,
+        "unsupported network etp": 2,
+        "unsupported network ftm": 1,
+        "unsupported network fil": 1,
+        "unsupported network gmt": 2,
+        "unsupported network green": 1,
+        "unsupported network ksm": 2,
+        "unsupported network ltc": 2,
+        "unsupported network luna": 3,
+        "unsupported network near": 1,
+        "unsupported network neo": 2,
+        "unsupported network oasis": 1,
+        "unsupported network omni": 2,
+        "unsupported network planets": 1,
+        "unsupported network polis": 2,
+        "unsupported network dot": 2,
+        "unsupported network oxy": 2,
+        "unsupported network rbtc": 2,
+        "unsupported network reef": 1,
+        "unsupported network ripple": 2,
+        "unsupported network srm": 1,
+        "unsupported network sol": 2,
+        "unsupported network sgb": 1,
+        "unsupported network xlm": 2,
+        "unsupported network tlos": 1,
+        "unsupported network theta": 1,
+        "unsupported network usdt": 10,
+        "unsupported network xtz": 2,
+        "unsupported network vet": 2,
+        "unsupported network v-systems": 1,
+        "unsupported network waxp": 1,
+        "unsupported network waves": 1,
+        "unsupported network xinfin": 1,
+        "unsupported network xrd": 1,
+        "unsupported network yoyow": 1,
+        "unsupported network ziliqa": 1,
+        "unsupported network zec": 2,
+        "unsupported network xvg": 1,
+        "unsupported network xmr": 2,
+        "unsupported network miota": 2,
+        "unsupported network dgb": 2,
+        "unsupported network clo": 1,
+        "unsupported network l-btc": 2,
+        "unsupported network zil": 2,
+        "unsupported network xns": 1,
+        "unsupported network mob": 1,
+        "unsupported network doge": 1,
+        "unsupported network dcr": 1,
+        "unsupported network xec": 1,
+        "unsupported network kaihot": 1,
+        "unsupported network ccd": 1,
+        "unsupported network gst": 1,
+        "unsupported network luna2": 1,
+        "unsupported network smr": 2
+      }
+    },
+    {
+      "pack": "exchange-wallets-bybit.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-bybit.yaml",
+      "sha256": "134dfb7607f492086dc72ad8e4e4100c4c8bb3a17427cb5cc28ced030cc2486e",
+      "kept": 8,
+      "skipped": {}
+    },
+    {
+      "pack": "exchange-wallets-cryptocom.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-cryptocom.yaml",
+      "sha256": "461f81a1a452e0f06f0954f11445f0b44e796db52bc6fae231b6e3c76023d96d",
+      "kept": 10,
+      "skipped": {}
+    },
+    {
+      "pack": "exchange-wallets-deribit.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-deribit.yaml",
+      "sha256": "7aaa9365b6226462ca5968b4b257b47d79cea83218be8405906ad8556b883ce9",
+      "kept": 16,
+      "skipped": {
+        "unsupported network sol": 2
+      }
+    },
+    {
+      "pack": "exchange-wallets-huobi.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-huobi.yaml",
+      "sha256": "6034869b65b060d08c9d1fcd4835986e25ca27e4b083069e50e543c79fa1a2df",
+      "kept": 38,
+      "skipped": {
+        "unsupported network ada": 1,
+        "unsupported network atom": 1,
+        "unsupported network bch": 2,
+        "unsupported network doge": 4,
+        "unsupported network dot": 2,
+        "unsupported network eos": 1,
+        "unsupported network etc": 2,
+        "unsupported network fil": 2,
+        "unsupported network ltc": 1,
+        "unsupported network sol": 1,
+        "unsupported network algo": 1,
+        "unsupported network avax": 1,
+        "unsupported network xrp": 1
+      }
+    },
+    {
+      "pack": "exchange-wallets-kucoin.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-kucoin.yaml",
+      "sha256": "8a9aac7c252635637072f46ab2caa3adefde64faf0802acd2b6f6af17ea40632",
+      "kept": 24,
+      "skipped": {
+        "unsupported network kcs": 6,
+        "unsupported network usdt": 15,
+        "unsupported network usdc": 14
+      }
+    },
+    {
+      "pack": "exchange-wallets-okx.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-okx.yaml",
+      "sha256": "c84e725af5b1cbcfbb410c6d2762cefa033baa97aa0cd0379daa1b4429b4d643",
+      "kept": 36,
+      "skipped": {}
+    },
+    {
+      "pack": "exchange-wallets-swissborg.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/exchange-wallets-swissborg.yaml",
+      "sha256": "b54393fd6e1b253ce1189ed53dc1c61255d4507e7e9cc95d73d333b4872d9603",
+      "kept": 14,
+      "skipped": {}
+    },
+    {
+      "pack": "binance.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/binance.yaml",
+      "sha256": "446a85840b4318d27ec8a3ab74a3fa2779ddd87907ddc0ceff428d6ff18bedd7",
+      "kept": 2,
+      "skipped": {}
+    },
+    {
+      "pack": "etherscan-wordcloud-exchange.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/etherscan-wordcloud-exchange.yaml",
+      "sha256": "d75a7b563d26cc64349bdbb6c09f2a969654ee425be6d7944684a9d66c8513da",
+      "kept": 646,
+      "skipped": {}
+    },
+    {
+      "pack": "tornado_cash.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/tornado_cash.yaml",
+      "sha256": "a2fdafe9a32f538150e70b13e7653088bdff82abcd74085dc8c9d380e00480bd",
+      "kept": 39,
+      "skipped": {}
+    },
+    {
+      "pack": "blender_io.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/blender_io.yaml",
+      "sha256": "b83e8766aeac4c7f0183513e3f2086e40952e3b1d5d795f15ffa191edf2604dd",
+      "kept": 45,
+      "skipped": {}
+    },
+    {
+      "pack": "sinbad_io.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/sinbad_io.yaml",
+      "sha256": "6d6adab5c13f8fbfc9176325e1b7227abfb62858e69f4bfaa8728aa4af6af0a3",
+      "kept": 2,
+      "skipped": {}
+    },
+    {
+      "pack": "wasabi_collector.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/wasabi_collector.yaml",
+      "sha256": "470f40135e8b8c0040a6e85b5e5251133b01c27ceb751896501d408ff6d89a66",
+      "kept": 2,
+      "skipped": {}
+    },
+    {
+      "pack": "mixing_fc2021.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/mixing_fc2021.yaml",
+      "sha256": "4ac135d275f76ef30d46986a7348fed62e7e0f9a8570e24107623628c0ca2c3e",
+      "kept": 66,
+      "skipped": {}
+    },
+    {
+      "pack": "etherscan-wordcloud-mixing_service.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/etherscan-wordcloud-mixing_service.yaml",
+      "sha256": "d7920fb6386aa88a6c9f0db24bde66dbd2715ef8b2a03487390cd1a8c9e857e2",
+      "kept": 61,
+      "skipped": {}
+    },
+    {
+      "pack": "ofac.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/ofac.yaml",
+      "sha256": "d545e6e88a2590aee15c3cd55df9a225a29fd569c5079393748ee4c3bfd1d682",
+      "kept": 534,
+      "skipped": {
+        "unsupported network ltc": 8,
+        "unsupported network zec": 3,
+        "unsupported network bsv": 1,
+        "unsupported network dash": 3,
+        "unsupported network usdt": 9,
+        "unsupported network xrp": 1,
+        "unsupported network bch": 7,
+        "unsupported network xmr": 3,
+        "unsupported network btg": 1,
+        "unsupported network xvg": 1,
+        "invalid address": 1
+      }
+    },
+    {
+      "pack": "usdt_blacklist.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/usdt_blacklist.yaml",
+      "sha256": "9039a2295e8cf27e5d57189e2b61d12395bbee1cc3c2c05aef3f96b4b9c07bd0",
+      "kept": 774,
+      "skipped": {}
+    },
+    {
+      "pack": "lazarus.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/lazarus.yaml",
+      "sha256": "8b84a1ac2b239cdaccafbf8a76ae905fe53e48189f30d5c022fec3b614637aa9",
+      "kept": 21,
+      "skipped": {}
+    },
+    {
+      "pack": "lazarus2.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/lazarus2.yaml",
+      "sha256": "c73d0b81398fe8c213d2db681a050b8d8462502eebdf51567060af603bb6f04c",
+      "kept": 6,
+      "skipped": {}
+    },
+    {
+      "pack": "ransomware.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/ransomware.yaml",
+      "sha256": "f97a3234016b54b0d8641e41a097c6353896d6f0caae14789f893f4fd2764522",
+      "kept": 7178,
+      "skipped": {}
+    },
+    {
+      "pack": "ransomwhere.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/ransomwhere.yaml",
+      "sha256": "fa2061e36c4d6b1eed3590bd17e1138198245dd2d11999be1589be0eac122ae0",
+      "kept": 7457,
+      "skipped": {}
+    },
+    {
+      "pack": "hacks.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/hacks.yaml",
+      "sha256": "7fff7a640e14800f749fa6cb222cea7494d0d92767106fa4ecca8976ca682c60",
+      "kept": 603,
+      "skipped": {
+        "no category or abuse": 5
+      }
+    },
+    {
+      "pack": "ronin_bridge.yaml",
+      "url": "https://raw.githubusercontent.com/graphsense/graphsense-tagpacks/master/packs/ronin_bridge.yaml",
+      "sha256": "0ffc3e8c8e5ff6d0355b006a1896f9228bb2f92ec590ad29c6907850c24b7ab9",
+      "kept": 6,
+      "skipped": {}
+    }
+  ]
+}
