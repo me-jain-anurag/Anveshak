@@ -10,7 +10,7 @@ def _short(address: str) -> str:
     return address if len(address) <= 14 else f"{address[:6]}…{address[-5:]}"
 
 
-def build_graph(traces: list[TraceResult]) -> dict:
+def build_graph(traces: list[TraceResult], links: list | None = None) -> dict:
     nodes: dict[str, dict] = {}
     edges: dict[str, dict] = {}
 
@@ -56,4 +56,20 @@ def build_graph(traces: list[TraceResult]) -> dict:
             r = risk.get(address)
             if r and n["data"]["chain"] == trace.chain:
                 n["data"]["risk"] = ", ".join(r.flags)
+    for link in links or []:
+        if link.to_chain is None:
+            continue
+        target = node(link.to_chain.value, link.to_address)
+        edges[link.id] = {
+            "data": {
+                "id": link.id,
+                "source": f"{link.from_chain.value}:{link.from_address}",
+                "target": target["data"]["id"],
+                "label": f"{link.protocol}: {link.asset_out}",
+                "tx": link.to_tx or "",
+                "time": "",
+                "url": link.to_chain.tx_url(link.to_tx) if link.to_tx else "",
+                "crosschain": True,
+            }
+        }
     return {"nodes": list(nodes.values()), "edges": list(edges.values())}

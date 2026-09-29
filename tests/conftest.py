@@ -34,6 +34,8 @@ def settings(tmp_path: Path) -> Settings:
         esplora_base_url="https://esplora.test/api",
         var_dir=tmp_path / "var",
         api_token="",
+        monitor_interval_seconds=0,
+        embedded_workers=2,
     )
 
 

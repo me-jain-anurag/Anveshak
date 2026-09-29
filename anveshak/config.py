@@ -35,6 +35,10 @@ class Settings:
     callback_allowlist: tuple[str, ...] = ()
     monitor_interval_seconds: int = 600
     embedded_workers: int = 2
+    chainalysis_api_key: str = ""
+    etherscan_nametags: bool = False
+    evm_probe_chains: tuple[str, ...] = ("ethereum", "polygon", "arbitrum", "bsc")
+    auto_follow_up: bool = True
     data_dir: Path = DATA_DIR
 
     @property
@@ -67,4 +71,8 @@ def load_settings() -> Settings:
         callback_allowlist=tuple(h.strip().lower() for h in env.get("ANVESHAK_CALLBACK_ALLOWLIST", "").split(",") if h.strip()),
         monitor_interval_seconds=int(env.get("ANVESHAK_MONITOR_INTERVAL", "600")),
         embedded_workers=int(env.get("ANVESHAK_EMBEDDED_WORKERS", "2")),
+        chainalysis_api_key=env.get("CHAINALYSIS_API_KEY", "").strip(),
+        etherscan_nametags=env.get("ETHERSCAN_NAMETAGS", "").strip().lower() in ("1", "true", "yes"),
+        evm_probe_chains=tuple(c.strip() for c in env.get("ANVESHAK_EVM_CHAINS", "ethereum,polygon,arbitrum,bsc").split(",") if c.strip()),
+        auto_follow_up=env.get("ANVESHAK_AUTO_FOLLOW_UP", "1").strip().lower() in ("1", "true", "yes"),
     )
