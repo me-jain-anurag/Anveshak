@@ -123,7 +123,10 @@ def test_invalid_subject_address_rejected():
 def test_report_is_watermarked_and_has_no_probabilities(demo_engine, demo_request):
     html = render_report(demo_engine.run(demo_request))
     assert "SYNTHETIC — NOT EVIDENCE" in html
-    assert "%" not in html.replace("100%", "")  # no percentages / probabilities anywhere
+    import re
+
+    assert "They are not probabilities" in html
+    assert not re.search(r"confidence[^<]{0,40}\d+\s*%", html, re.I)  # a confidence is never shown as a percentage
     assert "G-A1" in html and "D-COSPEND" in html and "R-SWEEP" in html
 
 

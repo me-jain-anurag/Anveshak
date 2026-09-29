@@ -133,9 +133,9 @@ class Service:
     def post_process(self, result: CaseResult, row: dict) -> None:
         f = result.findings
         live = f.data_mode is DataMode.LIVE
-        for analysis in f.analyses:
-            for a in analysis.alerts:
-                self.store.add_alert(a.severity.value, a.rule, a.message, a.chain, a.addresses[0] if a.addresses else None, result.case_id)
+        unique = {(a.rule, a.addresses, a.message): a for analysis in f.analyses for a in analysis.alerts}
+        for a in unique.values():  # a subject's out- and in-traces can raise the same alert
+            self.store.add_alert(a.severity.value, a.rule, a.message, a.chain, a.addresses[0] if a.addresses else None, result.case_id)
         sightings = set()
         for trace in f.traces:
             sightings.add((trace.chain.value, trace.subject, "subject"))
@@ -292,9 +292,13 @@ class Service:
         vasps: dict[str, dict] = defaultdict(lambda: {"cases": set(), "ready_drafts": 0, "best_confidence": 0, "min_hops": None})
         hops_hist: Counter = Counter()
         links = 0
+        legacy = 0
         for row in rows:
             data = json.loads(row["result_json"])
-            f = data["findings"]
+            f = data.get("findings") or {}
+            if "analyses" not in f:
+                legacy += 1  # produced by an engine version before scoring/analysis existed
+                continue
             by_mode[row["data_mode"]] += 1
             links += len(f.get("crosschain_links", []))
             for t in f["traces"]:
@@ -335,4 +339,5 @@ class Service:
             "cross_chain_links": links,
             "alerts_by_severity": dict(alerts),
             "watchlist_active": len(self.store.watches()),
+            "legacy_cases_not_analysed": legacy,
         }

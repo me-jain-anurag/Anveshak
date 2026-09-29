@@ -17,13 +17,21 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from .chain import Chain
 
 
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+def drop_derived_id(data):
+    """`id` is derived from content and serialised for API consumers; on input it is dropped
+    and recomputed, so a stored id can never disagree with the data it names."""
+    if isinstance(data, dict) and "id" in data:
+        data = {k: v for k, v in data.items() if k != "id"}
+    return data
 
 
 # --------------------------------------------------------------------------- facts
@@ -329,6 +337,9 @@ class Endpoint(Frozen):
     bottleneck: AssetAmount | None = None  # upper bound on value that could have moved along this path
     notes: tuple[str, ...] = ()
 
+    _drop_id = model_validator(mode="before")(classmethod(lambda cls, data: drop_derived_id(data)))
+
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def id(self) -> str:
         digest = hashlib.sha256("|".join(self.path).encode()).hexdigest()[:12]

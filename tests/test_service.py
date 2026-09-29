@@ -120,3 +120,29 @@ def test_api_new_endpoints(settings):
     assert client.delete(f"/v1/watchlist/{w['watch_id']}").json()["active"] is False
     bad = client.post("/v1/sahyog/reports", json={"sahyog_reference": "S-2", "wallets": ["nope"]})
     assert bad.status_code == 422
+
+
+def test_old_database_is_migrated(tmp_path):
+    import sqlite3
+
+    from anveshak.storage import CaseStore
+
+    path = tmp_path / "old.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE cases (case_id TEXT PRIMARY KEY, case_reference TEXT NOT NULL, data_mode TEXT NOT NULL, status TEXT NOT NULL, request_json TEXT NOT NULL, result_json TEXT, findings_hash TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+    db.execute("INSERT INTO cases VALUES ('old', 'REF', 'live', 'done', '{}', NULL, NULL, NULL, 't', 't')")
+    db.commit()
+    db.close()
+    store = CaseStore(path)
+    store.create("new", "REF-2", "live", {}, sahyog_reference="S-9")
+    assert store.get("new")["sahyog_reference"] == "S-9" and store.get("old")["case_reference"] == "REF"
+
+
+def test_legacy_results_do_not_break_api(settings):
+    client = TestClient(create_app(replace(settings, embedded_workers=0)))
+    store = client.app.state.service.store
+    store.create("legacy1", "OLD", "live", {})
+    store.set_done("legacy1", json.dumps({"case_id": "legacy1", "findings": {"traces": []}}), "h")
+    assert client.get("/v1/analytics").json()["legacy_cases_not_analysed"] == 1
+    assert client.get("/v1/cases/legacy1").json()["status"] == "legacy"
+    assert client.get("/v1/cases/legacy1/report").status_code == 409

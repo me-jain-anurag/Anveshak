@@ -9,68 +9,93 @@
 </head>
 <body>
 <header class="top">
-  <div>
-    <strong>Anveshak</strong>
-    <span class="muted">evidence-first wallet → VASP attribution</span>
-  </div>
+  <div class="brand"><strong>Anveshak</strong> <span class="muted">evidence-first wallet → VASP attribution</span></div>
+  <nav id="tabs">
+    <button data-tab="cases" class="on">Cases</button>
+    <button data-tab="intake">Sahyog intake</button>
+    <button data-tab="alerts">Alerts <span id="alert-count" class="pill"></span></button>
+    <button data-tab="watch">Watchlist</button>
+    <button data-tab="analytics">Analytics</button>
+    <button data-tab="lookup">Lookup</button>
+  </nav>
   <div id="meta" class="muted small"></div>
 </header>
 
-<div class="layout">
-  <aside>
-    <section class="card">
-      <h2>New case</h2>
-      <form id="case-form">
-        <label>Case reference <input name="case_reference" required placeholder="e.g. FIR 123/2026, Cyber PS"></label>
-        <label>Chain
-          <select name="chain">
-            <option value="tron">Tron</option>
-            <option value="ethereum">Ethereum</option>
-            <option value="bsc">BNB Smart Chain</option>
-            <option value="polygon">Polygon</option>
-            <option value="bitcoin">Bitcoin</option>
-          </select>
-        </label>
-        <label>Subject address <input name="address" required autocomplete="off" spellcheck="false" placeholder="wallet address"></label>
-        <fieldset class="row">
-          <label class="inline"><input type="checkbox" name="out" checked> funds out</label>
-          <label class="inline"><input type="checkbox" name="in" checked> funding in</label>
-        </fieldset>
-        <div class="row">
-          <label>Max hops <input name="max_hops" type="number" min="1" max="10" value="4"></label>
-          <label>Budget <input name="max_expansions" type="number" min="1" max="5000" value="60"></label>
-        </div>
-        <label>Since (optional) <input name="since" type="datetime-local"></label>
-        <button type="submit">Run live trace</button>
-        <p id="form-error" class="error"></p>
-      </form>
-      <button id="demo-btn" class="secondary">Run synthetic demo</button>
-      <p class="small muted">The demo uses fictional data and is watermarked "not evidence".</p>
-    </section>
+<section id="tab-cases" class="tab on">
+  <div class="layout">
+    <aside>
+      <div class="card">
+        <h2>New case</h2>
+        <form id="case-form">
+          <label>Case reference <input name="case_reference" required placeholder="e.g. FIR 123/2026, Cyber PS"></label>
+          <label>Subject address <input name="address" required autocomplete="off" spellcheck="false" placeholder="wallet address"></label>
+          <label>Chain <select name="chain" id="chain-select"></select></label>
+          <div id="detect-hint" class="small muted"></div>
+          <fieldset class="row">
+            <label class="inline"><input type="checkbox" name="out" checked> funds out</label>
+            <label class="inline"><input type="checkbox" name="in" checked> funding in</label>
+            <label class="inline"><input type="checkbox" name="xchain" checked> cross-chain</label>
+          </fieldset>
+          <div class="row">
+            <label>Max hops <input name="max_hops" type="number" min="1" max="10" value="4"></label>
+            <label>Budget <input name="max_expansions" type="number" min="1" max="5000" value="60"></label>
+          </div>
+          <label>Since (optional) <input name="since" type="datetime-local"></label>
+          <button type="submit">Run live trace</button>
+          <p id="form-error" class="error"></p>
+        </form>
+        <button id="demo-btn" class="secondary">Run synthetic demo</button>
+        <p class="small muted">The demo uses fictional data and is watermarked "not evidence".</p>
+      </div>
+      <div class="card">
+        <h2>Cases</h2>
+        <ul id="cases" class="list"></ul>
+      </div>
+    </aside>
+    <main id="case-view"><div class="empty muted">Select or run a case.</div></main>
+  </div>
+</section>
 
-    <section class="card">
-      <h2>Address lookup</h2>
-      <form id="lookup-form" class="row">
-        <select name="chain">
-          <option value="tron">Tron</option><option value="ethereum">Ethereum</option><option value="bsc">BSC</option>
-          <option value="polygon">Polygon</option><option value="bitcoin">Bitcoin</option>
-        </select>
-        <input name="address" required placeholder="address" spellcheck="false">
-        <button type="submit">Look up</button>
-      </form>
-      <div id="lookup-out" class="small"></div>
-    </section>
+<section id="tab-intake" class="tab">
+  <div class="card narrow">
+    <h2>Sahyog intake</h2>
+    <p class="small muted">Paste wallets reported on the Sahyog portal, one per line. The chain is detected from the address format and checksum. For 0x addresses, the EVM chains with activity are probed. Invalid inputs are rejected with a reason, never guessed.</p>
+    <form id="intake-form">
+      <label>Sahyog reference <input name="sahyog_reference" required placeholder="SAHYOG/2026/000123"></label>
+      <label>Agency <input name="agency" placeholder="Cyber Crime PS"></label>
+      <label>Wallets <textarea name="wallets" rows="6" required spellcheck="false"></textarea></label>
+      <button type="submit">Submit report</button>
+    </form>
+    <div id="intake-out"></div>
+  </div>
+</section>
 
-    <section class="card">
-      <h2>Cases</h2>
-      <ul id="cases" class="cases"></ul>
-    </section>
-  </aside>
-
-  <main id="main">
-    <div class="empty muted">Select or run a case.</div>
-  </main>
-</div>
+<section id="tab-alerts" class="tab"><div class="card"><h2>Alerts</h2><div id="alerts"></div></div></section>
+<section id="tab-watch" class="tab">
+  <div class="card">
+    <h2>Watchlist</h2>
+    <p class="small muted">Addresses still holding traced funds are watched automatically. Any new outgoing transfer raises a critical alert and queues a follow-up trace.</p>
+    <form id="watch-form" class="row">
+      <select name="chain" id="watch-chain"></select>
+      <input name="address" required placeholder="address" spellcheck="false">
+      <input name="reason" required placeholder="reason">
+      <button type="submit">Watch</button>
+    </form>
+    <div id="watchlist"></div>
+  </div>
+</section>
+<section id="tab-analytics" class="tab"><div class="card"><h2>Case analytics</h2><div id="analytics"></div></div></section>
+<section id="tab-lookup" class="tab">
+  <div class="card narrow">
+    <h2>Address lookup</h2>
+    <form id="lookup-form" class="row">
+      <select name="chain" id="lookup-chain"></select>
+      <input name="address" required placeholder="address" spellcheck="false">
+      <button type="submit">Look up</button>
+    </form>
+    <div id="lookup-out" class="small"></div>
+  </div>
+</section>
 <script src="/static/app.js"></script>
 </body>
 </html>

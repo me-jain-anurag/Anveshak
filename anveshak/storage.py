@@ -99,7 +99,24 @@ class CaseStore:
         with self._lock:
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA busy_timeout=30000")
+            self._migrate()
             self._db.executescript(SCHEMA)
+
+    # Columns added after the first release; older databases get them via ALTER TABLE.
+    _ADDED_COLUMNS = {
+        "cases": [("sahyog_reference", "TEXT"), ("callback_url", "TEXT"), ("claimed_by", "TEXT"), ("claimed_at", "TEXT")],
+    }
+
+    def _migrate(self) -> None:
+        """Additive, idempotent schema migration for databases created by earlier versions."""
+        for table, columns in self._ADDED_COLUMNS.items():
+            existing = {row[1] for row in self._db.execute(f"PRAGMA table_info({table})").fetchall()}
+            if not existing:
+                continue  # table not created yet — SCHEMA creates it complete
+            for name, sql_type in columns:
+                if name not in existing:
+                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+        self._db.commit()
 
     def _exec(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock, self._db:

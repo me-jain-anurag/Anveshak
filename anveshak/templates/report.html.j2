@@ -9,18 +9,21 @@
           --a:#1f7a3f; --b:#2f6fb3; --c:#a26a00; --x:#b3261e; --warn:#fff4d6; }
   * { box-sizing: border-box; }
   body { font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); margin: 0; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; position: relative; z-index: 1; }
   h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 32px 0 8px; border-bottom: 2px solid var(--ink); padding-bottom: 4px; }
   h3 { font-size: 14px; margin: 20px 0 6px; } h4 { font-size: 13px; margin: 14px 0 4px; }
-  table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; table-layout: auto; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; }
   th, td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--line); }
   th { background: var(--soft); font-weight: 600; }
   code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; word-break: break-all; }
   .muted { color: var(--muted); } .small { font-size: 11px; }
   .grade { display: inline-block; min-width: 22px; text-align: center; font-weight: 700; color: #fff; border-radius: 3px; padding: 0 5px; }
   .grade-A { background: var(--a); } .grade-B { background: var(--b); } .grade-C { background: var(--c); } .grade-X { background: var(--x); }
+  .score { font-weight: 700; } .band-high { color: var(--a); } .band-moderate { color: var(--b); } .band-low, .band-very_low { color: var(--c); } .band-none { color: var(--x); }
+  .lvl-severe, .lvl-high { color: var(--x); font-weight: 700; } .lvl-medium { color: var(--c); font-weight: 700; } .lvl-low, .lvl-none_observed { color: var(--muted); }
   .status { font-weight: 600; } .status-ready_for_approval { color: var(--a); } .status-analyst_review { color: var(--c); } .status-blocked { color: var(--x); }
   .v-verified { color: var(--a); } .v-mismatch { color: var(--x); font-weight: 700; } .v-unverifiable, .v-error { color: var(--c); }
+  .sev-critical, .sev-high { color: var(--x); font-weight: 700; } .sev-medium { color: var(--c); font-weight: 700; } .sev-info { color: var(--muted); }
   .box { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; margin: 8px 0; background: var(--soft); }
   .warn { background: var(--warn); border-color: #e0c060; }
   .watermark { position: fixed; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center;
@@ -29,6 +32,7 @@
   dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 8px 0; }
   dl.meta dt { color: var(--muted); } dl.meta dd { margin: 0; }
   details summary { cursor: pointer; }
+  .uncounted { color: var(--muted); text-decoration: line-through; }
   @media print { main { max-width: none; padding: 0; } h2 { break-after: avoid; } .box, table { break-inside: avoid; } a { color: inherit; } }
 </style>
 </head>
@@ -46,9 +50,11 @@
     <dt>Case id</dt><dd><code>{{ result.case_id }}</code></dd>
     <dt>Data mode</dt><dd>{{ findings.data_mode.value }}</dd>
     <dt>Requested by</dt><dd>{{ findings.request.requested_by or "—" }}</dd>
+    <dt>Subjects</dt><dd>{% for sub in findings.request.subjects %}<span class="mono">{{ sub.chain.value }} {{ sub.address }}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
     <dt>Findings hash</dt><dd><code>{{ result.findings_hash }}</code></dd>
     <dt>Label snapshot</dt><dd><code>{{ findings.label_snapshot }}</code></dd>
     <dt>Directory snapshot</dt><dd><code>{{ findings.directory_snapshot }}</code></dd>
+    <dt>Scoring policy</dt><dd>version {{ findings.policy_version }} · <code>{{ findings.policy_snapshot }}</code></dd>
     <dt>Evidence objects</dt><dd>{{ findings.evidence_ids | length }} referenced by findings ({{ result.fetched_evidence_count }} fetched in total)</dd>
   </dl>
 </header>
@@ -58,28 +64,66 @@
   <p>This report keeps three kinds of statement apart:</p>
   <ul>
     <li><strong>Facts</strong>: transactions recorded on a public ledger. Each is listed with its transaction hash and was re-checked against a transaction-level data source (column "Check").</li>
-    <li><strong>Claims</strong>: labels, i.e. a named source says an address belongs to someone or is associated with a risk. Every claim cites its source.</li>
-    <li><strong>Inferences</strong>: fixed, published rules applied to facts and claims. Every inference names its rule.</li>
+    <li><strong>Claims</strong>: labels, i.e. a named source says an address belongs to someone or is associated with a risk. Every claim cites its source. A claim to come from the entity itself counts only if published on that entity's official channel, and a claim to be official only if published on a government domain.</li>
+    <li><strong>Inferences</strong>: fixed, published rules applied to facts and claims. Every inference names its rule (section 7).</li>
   </ul>
-  <p>No machine-learning score, probability or AI-generated text is used anywhere in this report. Where the system does not know something, it says so.</p>
+  <p>No machine-learning model, probability or AI-generated text is used anywhere in this report. Where the system does not know something, it says so.</p>
   <h4>Attribution grades</h4>
   <table><tr><th>Grade</th><th>Meaning</th></tr>
   {% for g, text in GRADE_TEXT.items() %}<tr><td><span class="grade grade-{{ g.value }}">{{ g.value }}</span></td><td>{{ text }}</td></tr>{% endfor %}
   </table>
-  <p class="small muted">Grades describe <em>who says so and whether independent sources agree</em>. They are not probabilities and must not be read as percentages. Amounts shown as "bottleneck" are upper bounds, i.e. the smallest transfer on a path. They are not an estimate of how much of the subject's money reached the endpoint.</p>
+  <h4>Confidence score and risk score</h4>
+  <p class="small">The <strong>confidence score (0–100)</strong> measures how strongly the evidence supports "value traced from the subject reached this entity". It adds points for who attributes the address (up to 60), for independent re-verification of every transfer on the path (up to 25), for proximity in hops (up to 10) and for corroborating on-chain behaviour (up to 5). Two hard rules apply: conflicting owners, or any transfer failing verification, set the score to 0. The <strong>risk score (0–100)</strong> combines risk flags on the subject or its traced counterparties, service exposure (mixers, markets, bridges) and detected laundering patterns. Both scores are sums of itemised points defined in the scoring policy (hash above). They rank evidence strength. <strong>They are not probabilities.</strong> Amounts shown as "bottleneck" are upper bounds (the smallest transfer on a path), not estimates.</p>
 </section>
 
 <section>
-  <h2>2. Summary of routing drafts</h2>
+  <h2>2. Summary</h2>
+  <h3>Nearest VASPs</h3>
+  <table>
+    <tr><th>Subject / direction</th><th>#</th><th>VASP</th><th>Hops</th><th>Grade</th><th>Confidence</th><th>Deposit / withdrawal address</th></tr>
+    {% for t in traces %}{% for n in t.analysis.nearest_vasps %}
+    <tr>
+      <td class="mono">{{ t.trace.chain.value }} {{ t.trace.subject | short }}<br><span class="muted">{{ "funds out" if t.trace.params.direction.value == "out" else "funding in" }}{% if t.continuation %} · via {{ t.continuation.protocol }}{% endif %}</span></td>
+      <td>{{ n.rank }}</td>
+      <td>{{ n.entity_name or "unresolved owner (conflict)" }}</td>
+      <td>{{ n.hops }}</td>
+      <td><span class="grade grade-{{ n.grade.value }}">{{ n.grade.value }}</span></td>
+      <td><span class="score band-{{ n.band }}">{{ n.confidence }}</span> <span class="small muted">{{ n.band }}</span></td>
+      <td class="mono small">{{ n.deposit_address or n.address }}</td>
+    </tr>
+    {% endfor %}{% endfor %}
+  </table>
+  {% if not traces | selectattr("analysis.nearest_vasps") | list %}<p class="muted">No VASP was reached on any traced path.</p>{% endif %}
+
+  <h3>Wallet risk</h3>
+  <table>
+    <tr><th>Wallet</th><th>Risk</th><th>Contributions (points)</th></tr>
+    {% for r in findings.subject_risks %}
+    <tr><td class="mono">{{ r.chain }} {{ r.address }}</td>
+        <td><span class="lvl-{{ r.level }}">{{ r.level.replace("_", " ") }}</span> ({{ r.score }}/100)</td>
+        <td class="small">{% for i in r.items %}<div class="{{ '' if i.counted else 'uncounted' }}">{{ i.component }} {{ i.points }}: {{ i.reason }}</div>{% else %}no risk indicators observed in the traced data{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  <p class="small muted">Only the largest direct/exposure/service contribution counts (others are struck through), plus detected typologies up to the cap.</p>
+
+  {% if alerts %}
+  <h3>Alerts</h3>
+  <table><tr><th>Severity</th><th>Rule</th><th>Alert</th></tr>
+    {% for a in alerts %}<tr><td class="sev-{{ a.severity.value }}">{{ a.severity.value }}</td><td class="mono">{{ a.rule }}</td><td>{{ a.message }}</td></tr>{% endfor %}
+  </table>
+  {% endif %}
+
+  <h3>Request drafts</h3>
   {% if not findings.routing %}<p class="muted">No VASP or issuer was reached on any traced path. No request drafts were produced.</p>{% endif %}
   <table>
-    <tr><th>Subject / direction</th><th>Target</th><th>Request</th><th>Grade</th><th>Status</th><th>Why</th></tr>
+    <tr><th>Subject / direction</th><th>Target</th><th>Request</th><th>Grade</th><th>Confidence</th><th>Status</th><th>Why</th></tr>
     {% for d in findings.routing %}
     <tr>
       <td class="mono">{{ d.chain.value }} {{ d.subject | short }}<br><span class="muted">{{ "funds out" if d.direction.value == "out" else "funding in" }}</span></td>
       <td>{{ d.target_name }}</td>
       <td>{{ d.request_type.value.replace("_", " ") }}</td>
       <td>{% if d.grade %}<span class="grade grade-{{ d.grade.value }}">{{ d.grade.value }}</span> <span class="small">{{ d.attribution_rules | join(", ") }}</span>{% else %}—{% endif %}</td>
+      <td>{% if d.confidence is not none %}<span class="score band-{{ d.confidence_band }}">{{ d.confidence }}</span>{% else %}—{% endif %}</td>
       <td class="status status-{{ d.status.value }}">{{ d.status.value.replace("_", " ") }}</td>
       <td class="small">{{ d.reasons | join("; ") }}</td>
     </tr>
@@ -88,9 +132,29 @@
   <p class="small muted">Nothing is sent automatically. "Ready for approval" means the draft may be reviewed and approved by an officer, who then hands it to the Sahyog portal.</p>
 </section>
 
-{% for t in traces %}{% set trace = t.trace %}
+{% if findings.crosschain_links or findings.crosschain_errors %}
 <section>
-  <h2>3.{{ loop.index }} {{ trace.chain.value | capitalize }} · <span class="mono">{{ trace.subject }}</span> · {{ "funds out (where value went)" if trace.params.direction.value == "out" else "funding in (where value came from)" }}</h2>
+  <h2>3. Cross-chain movements</h2>
+  <table>
+    <tr><th>Rule</th><th>From</th><th>To</th><th>Assets</th><th>Destination check</th></tr>
+    {% for link in findings.crosschain_links %}
+    <tr>
+      <td class="mono">{{ link.rule }}<div class="small muted">{{ link.protocol }} · {{ link.status }}</div></td>
+      <td class="mono small">{{ link.from_chain.value }}<br><a href="{{ link.from_chain.tx_url(link.from_tx) }}">{{ link.from_tx | short }}</a><br>{{ link.from_address }}</td>
+      <td class="mono small">{{ link.to_chain.value if link.to_chain else link.to_chain_code + " (unsupported chain)" }}<br>{% if link.to_tx and link.to_chain %}<a href="{{ link.to_chain.tx_url(link.to_tx) }}">{{ link.to_tx | short }}</a>{% else %}outbound pending{% endif %}<br>{{ link.to_address }}</td>
+      <td class="small">{{ link.asset_in }} → {{ link.asset_out }}<div class="muted">memo {{ link.memo }}</div></td>
+      <td class="small">{{ {True: "confirmed", False: "NOT FOUND", None: "not confirmed"}[link.destination_confirmed] }}{% if link.destination_detail %}<div class="muted">{{ link.destination_detail }}</div>{% endif %}<div class="muted mono">evidence {{ link.evidence_id[:12] }}</div></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% for e in findings.crosschain_errors %}<div class="small v-error">{{ e }}</div>{% endfor %}
+</section>
+{% endif %}
+
+{% for t in traces %}{% set trace = t.trace %}{% set an = t.analysis %}
+<section>
+  <h2>4.{{ loop.index }} {{ trace.chain.display_name }} · <span class="mono">{{ trace.subject }}</span> · {{ "funds out (where value went)" if trace.params.direction.value == "out" else "funding in (where value came from)" }}</h2>
+  {% if t.continuation %}<div class="box">Cross-chain continuation: value reached this address through a {{ t.continuation.protocol }} swap ({{ t.continuation.asset_in }} → {{ t.continuation.asset_out }}), inbound tx <span class="mono">{{ t.continuation.from_tx }}</span> on {{ t.continuation.from_chain.value }} (rule {{ t.continuation.rule }}).</div>{% endif %}
   <dl class="meta small">
     <dt>Parameters</dt><dd>max hops {{ trace.params.max_hops }}, max branch {{ trace.params.max_branch }}, max expansions {{ trace.params.max_expansions }}{% if trace.params.since %}, since {{ trace.params.since | dt }}{% endif %}{% if trace.params.until %}, until {{ trace.params.until | dt }}{% endif %}{% if trace.params.follow_all_assets %}, following all assets{% endif %}{% if trace.params.include_unverified_assets %}, <strong>including unverified tokens</strong>{% endif %}</dd>
     <dt>Subject explorer</dt><dd><a href="{{ trace.chain.address_url(trace.subject) }}">{{ trace.chain.address_url(trace.subject) }}</a></dd>
@@ -100,19 +164,31 @@
   <h3>Endpoints</h3>
   {% if not trace.endpoints %}<p class="muted">No endpoints: {{ trace.coverage.subject_note or "nothing to follow" }}.</p>{% endif %}
   <table>
-    <tr><th>#</th><th>Where the path ends</th><th>Address</th><th>Attribution</th><th>Hops</th><th>Bottleneck</th></tr>
-    {% for e in trace.endpoints %}
+    <tr><th>#</th><th>Where the path ends</th><th>Address</th><th>Attribution</th><th>Confidence</th><th>Hops</th><th>Bottleneck</th><th>Flow risk</th></tr>
+    {% for e in trace.endpoints %}{% set sc = t.scores.get(e.id) %}{% set fr = t.flow_risks.get(e.id) %}
     <tr>
       <td>{{ loop.index }}</td>
       <td>{{ KIND_TEXT[e.kind] }}{% for n in e.notes %}<div class="small muted">{{ n }}</div>{% endfor %}</td>
       <td class="mono"><a href="{{ e.chain.address_url(e.address) }}">{{ e.address }}</a>
         {% if e.adjacent_address %}<div class="small muted">via {{ e.adjacent_address }}{% if e.adjacent_role %}<br>{{ e.adjacent_role }}{% endif %}</div>{% endif %}</td>
       <td>{% if e.attribution %}<span class="grade grade-{{ e.attribution.grade.value }}">{{ e.attribution.grade.value }}</span> {{ e.attribution.entity_name or "(conflict)" }} <span class="small muted">{{ e.attribution.rule }}</span>{% else %}<span class="muted">none</span>{% endif %}</td>
+      <td>{% if sc %}<span class="score band-{{ sc.band }}">{{ sc.score }}</span>{% else %}—{% endif %}</td>
       <td>{{ e.hops }}</td>
       <td>{{ e.bottleneck.formatted if e.bottleneck else "—" }}</td>
+      <td>{% if fr %}<span class="lvl-{{ fr.level }}">{{ fr.level.replace("_", " ") }}</span> {{ fr.score }}{% else %}—{% endif %}</td>
     </tr>
     {% endfor %}
   </table>
+
+  {% if an.confidences %}
+  <h3>Confidence breakdown</h3>
+  {% for sc in an.confidences %}
+  <div class="box small">
+    <strong>{{ sc.entity_name or "conflicted owner" }}</strong> at <span class="mono">{{ sc.address }}</span>: <span class="score band-{{ sc.band }}">{{ sc.score }}/100</span> ({{ sc.band.replace("_", " ") }}), grade {{ sc.grade.value if sc.grade else "—" }}{% if sc.hard_rule %} — <strong>{{ sc.hard_rule }}</strong>{% endif %}
+    <table>{% for i in sc.items %}<tr class="{{ '' if i.counted else 'uncounted' }}"><td>{{ i.component }}</td><td>{{ i.points }}</td><td>{{ i.reason }}</td></tr>{% endfor %}</table>
+  </div>
+  {% endfor %}
+  {% endif %}
 
   {% if t.detailed %}<h3>Paths and checks</h3>{% endif %}
   {% for e in t.detailed %}
@@ -122,7 +198,7 @@
     {% for tid in e.path %}{% set tr = t.by_id[tid] %}{% set v = verifications.get(tid) %}
     <tr>
       <td>{{ loop.index }}</td>
-      <td>{{ tr.timestamp | dt }}{% if tr.block_number is not none %}<div class="small muted">block {{ tr.block_number }}</div>{% endif %}</td>
+      <td>{{ tr.timestamp | dt }}{% if tr.block_number is not none %}<div class="small muted">block/slot {{ tr.block_number }}</div>{% endif %}</td>
       <td class="mono">{{ tr.sender }}<br>→ {{ tr.receiver }}</td>
       <td>{{ tr.formatted_amount }}{% if not tr.asset.verified %}<div class="small v-mismatch">unverified token contract</div>{% endif %}</td>
       <td class="mono"><a href="{{ tr.chain.tx_url(tr.tx_hash) }}">{{ tr.tx_hash | short }}</a><div class="small muted">evidence {{ tr.evidence_id[:12] }}</div></td>
@@ -132,18 +208,53 @@
   </table>
   {% endfor %}
 
+  {% if an.typologies %}
+  <h3>Laundering typologies detected</h3>
+  <table><tr><th>Rule</th><th>Pattern</th><th>Addresses</th><th>Transactions</th></tr>
+    {% for h in an.typologies %}
+    <tr><td class="mono">{{ h.rule }}</td><td>{{ h.detail }}<div class="small muted">{{ h.reference }}</div></td>
+        <td class="mono small">{% for a in h.addresses %}{{ a }}<br>{% endfor %}</td>
+        <td class="mono small">{% for x in h.tx_hashes %}{{ x | short }}<br>{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if an.clusters %}
+  <h3>Clusters</h3>
+  <table><tr><th>Cluster</th><th>Owner</th><th>Members (rule)</th></tr>
+    {% for c in an.clusters %}
+    <tr><td class="mono small">{{ c.cluster_id }}<div class="muted">{{ c.kind.replace("_", "-") }}{% if c.contains_subject %} · <strong>contains the subject</strong>{% endif %}</div></td>
+        <td>{{ c.entity_name or c.entity_id or "—" }}</td>
+        <td class="mono small">{% for m in c.members %}{{ m.address }} ({{ m.basis }})<br>{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% set roled = an.profiles | selectattr("roles") | list %}
+  {% if roled %}
+  <h3>Address roles and tags</h3>
+  <table><tr><th>Address</th><th>Roles (rule)</th><th>Tags</th></tr>
+    {% for p in roled %}
+    <tr><td class="mono small">{{ p.address }}</td>
+        <td class="small">{% for r in p.roles %}<div>{{ r.role.value.replace("_", " ") }} <span class="muted">({{ r.rule }})</span></div>{% endfor %}</td>
+        <td class="small muted">{{ p.tags | join(", ") }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
   {% if trace.attributions %}
   <h3>Attribution evidence</h3>
   {% for a in trace.attributions %}
   <div class="box">
     <div><span class="grade grade-{{ a.grade.value }}">{{ a.grade.value }}</span> <span class="mono">{{ a.address }}</span> — <strong>{{ a.entity_name or "conflicted" }}</strong> ({{ a.category.value if a.category else "no category" }})</div>
     <div>{{ a.explanation }}</div>
+    {% for note in a.trust_notes %}<div class="small v-error">Source check: {{ note }}</div>{% endfor %}
     {% if a.derived %}<div class="small">Derived via {{ a.derived.rule }} from <span class="mono">{{ a.derived.anchor_address }}</span> on {{ a.derived.anchor_chain.value }} (grade {{ a.derived.anchor_grade.value }}){% if a.derived.tx_hashes %}; transactions: {% for h in a.derived.tx_hashes %}<a class="mono" href="{{ a.derived.anchor_chain.tx_url(h) }}">{{ h | short }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>{% endif %}
     {% if a.labels %}
     <table class="small">
-      <tr><th>Label text</th><th>Entity</th><th>Source (class)</th><th>Primary source</th><th>As of</th><th>Dataset record</th></tr>
+      <tr><th>Label text</th><th>Entity</th><th>Source (class claimed → counted)</th><th>Primary source</th><th>As of</th><th>Dataset record</th></tr>
       {% for l in a.labels %}
-      <tr><td>{{ l.text }}</td><td>{{ l.entity_id or "—" }}</td><td>{{ l.source_id }} ({{ l.source_class.value }})</td>
+      <tr><td>{{ l.text }}</td><td>{{ l.entity_id or "—" }}</td><td>{{ l.source_id }} ({{ l.source_class.value }}{% if a.effective_classes and a.effective_classes[loop.index0] != l.source_class %} → {{ a.effective_classes[loop.index0].value }}{% endif %})</td>
           <td class="mono">{% if l.primary_source.startswith("http") %}<a href="{{ l.primary_source }}">{{ l.primary_source }}</a>{% else %}{{ l.primary_source }}{% endif %}</td>
           <td>{{ l.as_of or "—" }}</td><td class="mono">{{ l.dataset_ref }}</td></tr>
       {% endfor %}
@@ -179,31 +290,18 @@
     <tr><td>Incomplete histories</td><td>{% if c.incomplete_histories %}{% for h in c.incomplete_histories %}<div class="mono">{{ h }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
     <tr><td>Branches pruned (largest kept)</td><td>{% if c.pruned %}{% for p in c.pruned %}<div><span class="mono">{{ p.address }}</span>: kept {{ p.kept }} of {{ p.candidates }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
     <tr><td>Transfers not followed</td><td>{{ c.excluded_time_order }} before value arrived (time order) · {{ c.excluded_dust }} below dust threshold · {{ c.excluded_unverified_asset }} in unverified token contracts · {{ c.excluded_other_asset }} in other assets</td></tr>
-    <tr><td>Source errors</td><td>{% if c.source_errors %}{% for s in c.source_errors %}<div>{{ s }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
+    <tr><td>Source errors</td><td>{% if c.source_errors %}{% for x in c.source_errors %}<div>{{ x }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
     {% if c.subject_note %}<tr><td>Subject</td><td>{{ c.subject_note }}</td></tr>{% endif %}
   </table>
 </section>
 {% endfor %}
 
 <section>
-  <h2>4. Request drafts</h2>
+  <h2>5. Request drafts</h2>
   {% for d in findings.routing %}
-  <h3>{{ d.target_name }} — <span class="status status-{{ d.status.value }}">{{ d.status.value.replace("_", " ") }}</span></h3>
+  <h3>{{ d.target_name }} — {{ d.request_type.value.replace("_", " ") }} — <span class="status status-{{ d.status.value }}">{{ d.status.value.replace("_", " ") }}</span></h3>
   <pre>{{ d.draft_text }}</pre>
   {% else %}<p class="muted">None.</p>{% endfor %}
-</section>
-
-<section>
-  <h2>5. Method, rules and limitations</h2>
-  <h4>Rules referenced in this report</h4>
-  <table>{% for rid, text in RULE_TEXT.items() %}<tr><td class="mono">{{ rid }}</td><td>{{ text }}</td></tr>{% endfor %}</table>
-  <ul class="small">
-    <li>Paths follow value forward in time only (backward for funding traces). A transfer that happened before value arrived at an address is never followed.</li>
-    <li>Blockchain value is fungible. A path shows that value <em>could</em> have moved along it. The bottleneck is an upper bound on how much.</li>
-    <li>Absence of a finding is not evidence of absence. See the coverage table of each trace for what was not examined.</li>
-    <li>Labels come from the datasets named in each attribution. Their correctness is the responsibility of those sources. The grade shows how well supported each one is.</li>
-    <li>Token transfers are followed only for contracts in the verified asset registry. Tokens are identified by contract address, never by symbol.</li>
-  </ul>
 </section>
 
 <section>
@@ -215,17 +313,31 @@
 </section>
 
 <section>
-  <h2>7. Certificate under Section 63, Bharatiya Sakshya Adhiniyam, 2023 (template)</h2>
+  <h2>7. Method, rules and limitations</h2>
+  <h4>Rules referenced in this report</h4>
+  <table>{% for rid, text in RULE_TEXT.items() %}<tr><td class="mono">{{ rid }}</td><td>{{ text }}</td></tr>{% endfor %}</table>
+  <ul class="small">
+    <li>Paths follow value forward in time only (backward for funding traces). A transfer that happened before value arrived at an address is never followed.</li>
+    <li>Blockchain value is fungible. A path shows that value <em>could</em> have moved along it. The bottleneck is an upper bound on how much.</li>
+    <li>Absence of a finding is not evidence of absence. See the coverage table of each trace for what was not examined.</li>
+    <li>Labels come from the datasets named in each attribution. Their correctness is the responsibility of those sources. The grade and the confidence score show how well supported each one is.</li>
+    <li>Token transfers are followed only for contracts in the verified asset registry. Tokens are identified by contract address, never by symbol.</li>
+    <li>Cross-chain links come only from a protocol's own record naming both transactions. Nothing is matched by amount or time.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>8. Certificate under Section 63, Bharatiya Sakshya Adhiniyam, 2023 (template)</h2>
   <div class="box warn small">Template only. The certificate must be completed and signed by the responsible person (Part A) and the expert (Part B). Verify the prescribed format with the legal cell before use.</div>
   <table class="small">
     <tr><th colspan="2">Part A: by the party producing the electronic record</th></tr>
     <tr><td>Electronic record</td><td>This report (HTML) and its companion findings file <code>{{ result.case_id }}.json</code></td></tr>
     <tr><td>SHA-256 of this report</td><td>See the companion file <code>{{ result.case_id }}.html.sha256</code> (a document cannot contain its own hash)</td></tr>
     <tr><td>Findings hash</td><td><code>{{ result.findings_hash }}</code></td></tr>
-    <tr><td>System / software</td><td>Anveshak {{ findings.engine_version }}</td></tr>
+    <tr><td>System / software</td><td>Anveshak {{ findings.engine_version }}, scoring policy {{ findings.policy_version }}</td></tr>
     <tr><td>Name, designation, signature, date</td><td>&nbsp;</td></tr>
     <tr><th colspan="2">Part B: by the expert</th></tr>
-    <tr><td>Method</td><td>As described in section 5 and the project documentation (ADR-0002 to ADR-0011)</td></tr>
+    <tr><td>Method</td><td>As described in sections 1 and 7 and the project documentation (docs/adr)</td></tr>
     <tr><td>Reproduction</td><td>Replay of the case from the evidence store reproduces the findings hash above</td></tr>
     <tr><td>Name, qualification, signature, date</td><td>&nbsp;</td></tr>
   </table>
