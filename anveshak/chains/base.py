@@ -109,3 +109,27 @@ def dedupe_sorted(transfers: list[Transfer]) -> tuple[Transfer, ...]:
 
 def mismatch_detail(pairs: list[tuple[str, object, object]]) -> str:
     return "; ".join(f"{name}: listed {listed!r}, transaction shows {actual!r}" for name, listed, actual in pairs if listed != actual)
+
+
+class CachingSource(ChainSource):
+    """Per-case cache of address histories, so an address reached twice (two subjects, a
+    cross-chain destination check and its continuation trace) is fetched once."""
+
+    def __init__(self, inner: ChainSource):
+        self.inner = inner
+        self.chain = inner.chain
+        self._histories: dict[str, AddressHistory] = {}
+
+    def history(self, address: str) -> AddressHistory:
+        if address not in self._histories:
+            self._histories[address] = self.inner.history(address)
+        return self._histories[address]
+
+    def verify(self, transfer: Transfer) -> Verification:
+        return self.inner.verify(transfer)
+
+    def is_contract(self, address: str) -> bool | None:
+        return self.inner.is_contract(address)
+
+    def balance(self, address: str, asset: Asset) -> Balance | None:
+        return self.inner.balance(address, asset)

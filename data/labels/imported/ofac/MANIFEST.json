@@ -1,6 +1,6 @@
 {
   "source_id": "ofac-sdn-0xb10c",
-  "imported_at": "2026-09-29T19:36:53.867496+00:00",
+  "imported_at": "2026-09-29T20:16:31.736450+00:00",
   "files": [
     {
       "ticker": "XBT",
@@ -13,7 +13,7 @@
       "ticker": "ETH",
       "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_ETH.json",
       "sha256": "9fd366643773ef7eb31aee1d8997e3110fc42c7121ea35ef8270f1f8bba24ebc",
-      "kept": 360,
+      "kept": 840,
       "skipped": {}
     },
     {
@@ -27,14 +27,35 @@
       "ticker": "USDT",
       "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_USDT.json",
       "sha256": "6d01dbbbb2ea002ef93bf1897dc59fa9f9dceb0b7ce6313f57b041e25e5ab649",
-      "kept": 110,
+      "kept": 142,
       "skipped": {}
     },
     {
       "ticker": "USDC",
       "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_USDC.json",
       "sha256": "be0847511ce39fee6f27a3843f5f759819c606ab71136ca651e425c6d6f27f7d",
-      "kept": 6,
+      "kept": 14,
+      "skipped": {}
+    },
+    {
+      "ticker": "SOL",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_SOL.json",
+      "sha256": "5b9b0c66f35ed857b2b94a9a909ce903dcccb67e6920ba9dea7e891e6e91e3a0",
+      "kept": 4,
+      "skipped": {}
+    },
+    {
+      "ticker": "ARB",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_ARB.json",
+      "sha256": "75fc232c70671aab46438aa414e966d66cd6f241f70bc787c617d3835d625adb",
+      "kept": 7,
+      "skipped": {}
+    },
+    {
+      "ticker": "BSC",
+      "url": "https://raw.githubusercontent.com/0xB10C/ofac-sanctioned-digital-currency-addresses/lists/sanctioned_addresses_BSC.json",
+      "sha256": "75fc232c70671aab46438aa414e966d66cd6f241f70bc787c617d3835d625adb",
+      "kept": 7,
       "skipped": {}
     }
   ]

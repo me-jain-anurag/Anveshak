@@ -15,6 +15,8 @@ The scenario exercises every rule the engine has:
                           a transfer made *before* the funds arrived                (not followed: time order)
                           dust and a fake-USDT token                                (excluded, counted)
   Tron / USDT (backward)  suspect was funded by a withdrawal from an exchange       (A -> disclosure)
+  Cross-chain             600 USDT into a THORChain vault, swapped to BTC, deposited at Alpha
+                          (X-THORCHAIN link, continuation trace on Bitcoin, D-COSPEND)
   Bitcoin (forward)       two suspect addresses spent together                      (C-MULTI-INPUT subject cluster)
                           deposit address co-spent with an exchange wallet          (D-COSPEND, B)
                           change output entering a CoinJoin                         (coinjoin_like stop)
@@ -50,8 +52,8 @@ def txid(name: str) -> str:
     return hashlib.sha256(f"anveshak-demo-tx:{name}".encode()).hexdigest()
 
 
-T = {n: tron_addr(n) for n in ["victim-1", "victim-2", "suspect", "peel-1", "peel-2", "peel-3", "peel-4", "parking", "deposit-alpha", "alpha-hot", "beta-hot", "disputed", "mixer", "decoy", "dust", "fake-usdt-holder", "fake-usdt-contract"]}
-B = {n: btc_addr(n) for n in ["victim", "victim-b", "suspect", "suspect-2", "peel", "deposit", "alpha-hot", "other-deposit", "alpha-consolidated", "change", "cj-1", "cj-2", "cj-3", "cj-out-1", "cj-out-2", "cj-out-3", "cj-out-4", "cj-change"]}
+T = {n: tron_addr(n) for n in ["victim-1", "victim-2", "suspect", "peel-1", "peel-2", "peel-3", "peel-4", "parking", "thor-vault", "deposit-alpha", "alpha-hot", "beta-hot", "disputed", "mixer", "decoy", "dust", "fake-usdt-holder", "fake-usdt-contract"]}
+B = {n: btc_addr(n) for n in ["victim", "victim-b", "suspect", "suspect-2", "peel", "deposit", "alpha-hot", "other-deposit", "alpha-consolidated", "change", "cj-1", "cj-2", "cj-3", "cj-out-1", "cj-out-2", "cj-out-3", "cj-out-4", "cj-change", "thor-btc-vault", "thor-out", "deposit-2", "alpha-consolidated-2"]}
 
 
 def _synthetic_label(chain: Chain, address: str, source: str, klass: SourceClass, *, entity: str | None = None, name: str | None = None, category: Category | None = None, flags: tuple[RiskFlag, ...] = ()) -> Label:
@@ -164,8 +166,9 @@ def sources(registry: AssetRegistry) -> dict[Chain, MemorySource]:
         _account("deposit-sweep", T["deposit-alpha"], T["alpha-hot"], usdt, 4_000 * u, 180),
         _account("peel-2-to-peel-3", T["peel-2"], T["peel-3"], usdt, 6_400 * u, 200),
         _account("peel-2-to-mixer", T["peel-2"], T["mixer"], usdt, 1_500 * u, 210),
-        _account("peel-3-to-peel-4", T["peel-3"], T["peel-4"], usdt, 5_200 * u, 300),
+        _account("peel-3-to-peel-4", T["peel-3"], T["peel-4"], usdt, 4_600 * u, 300),
         _account("peel-3-to-beta", T["peel-3"], T["beta-hot"], usdt, 1_200 * u, 305),
+        _account("peel-3-to-thor", T["peel-3"], T["thor-vault"], usdt, 600 * u, 310),
         _account("peel-4-to-parking", T["peel-4"], T["parking"], usdt, 3_800 * u, 400),
     ]
     btc = registry.native(Chain.BITCOIN)
@@ -183,11 +186,46 @@ def sources(registry: AssetRegistry) -> dict[Chain, MemorySource]:
             btc,
             900_010,
         )
+        + _utxo("btc-thor-outbound", [B["thor-btc-vault"]], [(B["thor-out"], 900_000)], btc, 900_033)
+        + _utxo("btc-thor-out-to-deposit", [B["thor-out"]], [(B["deposit-2"], 890_000)], btc, 900_035)
+        + _utxo("btc-alpha-consolidation-2", [B["deposit-2"], B["alpha-hot"]], [(B["alpha-consolidated-2"], 50_000_000)], btc, 900_045)
     )
     return {
-        Chain.TRON: MemorySource(Chain.TRON, tron, balances={(T["parking"], usdt.key): 3_800 * u}),
+        Chain.TRON: MemorySource(Chain.TRON, tron, balances={(T["parking"], usdt.key): 3_800 * u}, incomplete={T["thor-vault"]}),
         Chain.BITCOIN: MemorySource(Chain.BITCOIN, bitcoin),
     }
+
+
+class DemoThorchain:
+    """SYNTHETIC stand-in for Midgard: one swap, Tron USDT (peel-3 -> THORChain vault) to BTC."""
+
+    name = "thorchain"
+
+    def resolve(self, chain: Chain, tx_hash: str, from_address: str, endpoint_id: str):
+        from .crosschain import CrossChainLink
+
+        if chain is not Chain.TRON or tx_hash != txid("peel-3-to-thor"):
+            return []
+        return [
+            CrossChainLink(
+                protocol="thorchain",
+                rule="X-THORCHAIN",
+                from_chain=Chain.TRON,
+                from_tx=tx_hash,
+                from_address=from_address,
+                endpoint_id=endpoint_id,
+                to_chain=Chain.BITCOIN,
+                to_chain_code="BTC",
+                to_address=B["thor-out"],
+                to_tx=txid("btc-thor-outbound"),
+                asset_in="TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+                asset_out="BTC.BTC",
+                amount_out="900000",
+                memo=f"=:BTC.BTC:{B['thor-out']}",
+                status="success",
+                evidence_id="synthetic",
+            )
+        ]
 
 
 def trust(directory: VaspDirectory):
@@ -211,7 +249,7 @@ def engine(registry: AssetRegistry, real_directory: VaspDirectory):
     from .case import DataMode, Engine
 
     d = directory(real_directory)
-    return Engine(DataMode.SYNTHETIC, labels(), registry, d, sources=sources(registry), trust=trust(d))
+    return Engine(DataMode.SYNTHETIC, labels(), registry, d, sources=sources(registry), trust=trust(d), resolvers=[DemoThorchain()])
 
 
 def request(case_reference: str = CASE_REFERENCE):

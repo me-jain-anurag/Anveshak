@@ -52,10 +52,11 @@ def test_demo_analysis_outputs(demo_engine, demo_request):
     r = demo_engine.run(demo_request)
     tron_out = next(a for a in r.findings.analyses if a.chain == "tron" and a.direction == "out")
     # nearest VASP answer: ranked by hops, then confidence
-    assert [n.entity_id for n in tron_out.nearest_vasps][:1] == [None]  # the disputed address (2 hops) is nearest...
-    assert tron_out.nearest_vasps[0].grade is Grade.X and tron_out.nearest_vasps[0].confidence == 0  # ...but scores 0
-    alpha = next(n for n in tron_out.nearest_vasps if n.entity_id == "demo-alpha")
-    assert alpha.hops == 3 and alpha.deposit_address == demo.T["deposit-alpha"]
+    alpha = tron_out.nearest_vasps[0]  # resolved owners rank first, nearest first
+    assert alpha.entity_id == "demo-alpha" and alpha.hops == 3 and alpha.deposit_address == demo.T["deposit-alpha"]
+    assert alpha.confidence >= 80
+    disputed = tron_out.nearest_vasps[-1]  # the conflicted address is 2 hops away but listed last, scored 0
+    assert disputed.grade is Grade.X and disputed.hops == 2 and disputed.confidence == 0
     kinds = {h.rule for h in tron_out.typologies}
     assert {"T-PEEL", "T-PASS", "T-MIXER"} <= kinds
     roles = {(p.address, rt.role.value) for p in tron_out.profiles for rt in p.roles}
@@ -124,3 +125,18 @@ def test_report_is_watermarked_and_has_no_probabilities(demo_engine, demo_reques
     assert "SYNTHETIC — NOT EVIDENCE" in html
     assert "%" not in html.replace("100%", "")  # no percentages / probabilities anywhere
     assert "G-A1" in html and "D-COSPEND" in html and "R-SWEEP" in html
+
+
+def test_cross_chain_continuation(demo_engine, demo_request):
+    r = demo_engine.run(demo_request)
+    (link,) = r.findings.crosschain_links
+    assert link.rule == "X-THORCHAIN" and link.to_chain is Chain.BITCOIN and link.destination_confirmed is True
+    (cont,) = r.findings.continuations
+    trace = r.findings.traces[cont.trace_index]
+    assert trace.chain is Chain.BITCOIN and trace.subject == demo.B["thor-out"]
+    vasp = next(e for e in trace.endpoints if e.kind is EndpointKind.VASP)
+    assert vasp.attribution.entity_id == "demo-alpha" and vasp.attribution.rule == "D-COSPEND"
+    via = [d for d in r.findings.routing if d.chain is Chain.BITCOIN and d.subject == demo.B["thor-out"]]
+    assert via and all(d.via and "thorchain" in d.via for d in via)
+    tron_out = next(a for a in r.findings.analyses if a.chain == "tron" and a.direction == "out")
+    assert any(h.rule == "T-CHAINHOP" for h in tron_out.typologies)

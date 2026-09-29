@@ -119,7 +119,7 @@ class Tracer:
     # ------------------------------------------------------------------ helpers
 
     def _is_contract(self, address: str) -> bool | None:
-        if self.chain.family is not ChainFamily.EVM:
+        if self.chain.family not in (ChainFamily.EVM, ChainFamily.SOLANA):
             return None
         try:
             return self.source.is_contract(address)
@@ -274,14 +274,19 @@ class Tracer:
                         notes=("conflicting attribution — manual review",) if att.grade is Grade.X else (),
                     )
                     continue
-                if chain.family is ChainFamily.EVM and self._is_contract(nxt) is True:
+                if self._is_contract(nxt) is True:
+                    what = (
+                        "program-derived address (no private key: a pool, vault or escrow controlled by a program)"
+                        if chain.family is ChainFamily.SOLANA
+                        else "smart contract"
+                    )
                     endpoint(
                         EndpointKind.UNLABELED_CONTRACT,
                         nxt,
                         hops,
                         path,
                         adjacent_address=node.address,
-                        notes=("smart contract without a label — funds may be pooled (DEX, bridge, service); review manually",),
+                        notes=(f"{what} without a label — funds may be pooled (DEX, bridge, service); review manually",),
                     )
                     continue
                 if hops >= params.max_hops:
