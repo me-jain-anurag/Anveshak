@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from pydantic import computed_field, model_validator
+
 from ..chain import Chain
-from ..domain import Frozen
+from ..domain import Frozen, drop_derived_id
 
 
 class CrossChainLink(Frozen):
@@ -36,6 +38,9 @@ class CrossChainLink(Frozen):
     destination_confirmed: bool | None = None  # outbound tx found paying to_address on to_chain
     destination_detail: str | None = None
 
+    _drop_id = model_validator(mode="before")(classmethod(lambda cls, data: drop_derived_id(data)))
+
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def id(self) -> str:
         return f"{self.protocol}:{self.from_chain}:{self.from_tx}:{self.to_chain_code}:{self.to_tx or 'pending'}:{self.to_address}"

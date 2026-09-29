@@ -38,6 +38,18 @@ RULE_TEXT = {
     "D-COSPEND": "Bitcoin: spent in the same non-CoinJoin transaction as an A/B-attributed address (spending needs each input's key). Grade lowered one step.",
     "D-EVM-KEY": "EVM: A/B-attributed on another EVM chain and an externally-owned account here — the same key holder. Grade lowered one step.",
     "R-SWEEP": "Account chains: every qualifying transfer the address made after value arrived went to the same VASP — a deposit-address pattern.",
+    "R-SWEEP-TARGET": "Receives a sweep from a deposit-pattern address — the VASP's hot / collection wallet.",
+    "R-CONSOLIDATION": "Bitcoin: received from outside, then spent together with a VASP's addresses — a deposit address.",
+    "R-LABEL-ROLE": "Role (hot / cold / reserve / deposit wallet) stated in the label text itself.",
+    "C-MULTI-INPUT": "Bitcoin: addresses spent together in a non-CoinJoin transaction share a controller (Meiklejohn et al. 2013).",
+    "X-THORCHAIN": "Cross-chain link from THORChain's own record of a swap (inbound and outbound transaction ids), confirmed on the destination chain.",
+    "T-PEEL": "Peel chain: consecutive transfers, each smaller than the last but keeping most of it.",
+    "T-PASS": "Rapid pass-through: most of a received amount forwarded within minutes.",
+    "T-FANOUT": "Fan-out: one address pays many distinct addresses within a short window.",
+    "T-FANIN": "Fan-in: many distinct addresses pay one address within a short window.",
+    "T-MIXER": "Value entered a mixer.",
+    "T-COINJOIN": "Value entered a CoinJoin-like transaction.",
+    "T-CHAINHOP": "Value crossed to another chain through a bridge or swap service.",
 }
 
 KIND_TEXT = {
@@ -73,8 +85,10 @@ def _env() -> Environment:
 def render_report(result: CaseResult) -> str:
     f = result.findings
     verifications = {v.transfer_id: v for v in f.verifications}
+    links = {link.id: link for link in f.crosschain_links}
+    continued = {c.trace_index: links.get(c.link_id) for c in f.continuations}
     traces = []
-    for trace in f.traces:
+    for index, (trace, analysis) in enumerate(zip(f.traces, f.analyses)):
         by_id = {t.id: t for t in trace.transfers}
         att = {a.address: a for a in trace.attributions}
         detailed = [e for e in trace.endpoints if e.kind in (EndpointKind.VASP, EndpointKind.SERVICE, EndpointKind.DORMANT, EndpointKind.COINJOIN_LIKE, EndpointKind.UNLABELED_CONTRACT, EndpointKind.HIGH_ACTIVITY)]
@@ -86,6 +100,10 @@ def render_report(result: CaseResult) -> str:
                 "detailed": detailed,
                 "others": [e for e in trace.endpoints if e not in detailed],
                 "routing": [d for d in f.routing if d.chain == trace.chain and d.subject == trace.subject and d.direction == trace.params.direction],
+                "analysis": analysis,
+                "scores": {sc.endpoint_id: sc for sc in analysis.confidences},
+                "flow_risks": {fr.scope.split(":", 1)[1]: fr for fr in analysis.flow_risks},
+                "continuation": continued.get(index),
             }
         )
     return _env().get_template("report.html.j2").render(
@@ -94,6 +112,7 @@ def render_report(result: CaseResult) -> str:
         synthetic=f.data_mode is DataMode.SYNTHETIC,
         traces=traces,
         verifications=verifications,
+        alerts=sorted({(a.severity.value, a.rule, a.message): a for an in f.analyses for a in an.alerts}.values(), key=lambda a: (["critical", "high", "medium", "info"].index(a.severity.value), a.rule)),
     )
 
 

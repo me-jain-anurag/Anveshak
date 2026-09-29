@@ -34,7 +34,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from . import __version__, demo
 from .addresses import AddressError, detect_chains, normalize
@@ -117,7 +117,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "case not found")
         if row["status"] != "done":
             raise HTTPException(409, f"case is {row['status']}")
-        return CaseResult.model_validate_json(row["result_json"])
+        try:
+            return CaseResult.model_validate_json(row["result_json"])
+        except ValidationError as exc:
+            raise HTTPException(409, "case was produced by an older engine version; re-run it to use this view") from exc
 
     # ------------------------------------------------------------------ meta
 
@@ -202,7 +205,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "case not found")
         out = {k: row[k] for k in ("case_id", "case_reference", "data_mode", "status", "error", "findings_hash", "sahyog_reference", "created_at", "updated_at")}
         if row["status"] == "done":
-            out["result"] = CaseResult.model_validate_json(row["result_json"]).model_dump(mode="json")
+            try:
+                out["result"] = CaseResult.model_validate_json(row["result_json"]).model_dump(mode="json")
+            except ValidationError:
+                out["status"] = "legacy"
+                out["error"] = "produced by an older engine version — re-run the case; the stored JSON and report remain unchanged on disk"
             out["approvals"] = service.store.approvals(case_id)
             out["callbacks"] = service.store.callbacks(case_id)
         return out
