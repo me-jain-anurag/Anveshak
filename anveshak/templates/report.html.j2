@@ -141,8 +141,8 @@
     <tr>
       <td class="mono">{{ link.rule }}<div class="small muted">{{ link.protocol }} · {{ link.status }}</div></td>
       <td class="mono small">{{ link.from_chain.value }}<br><a href="{{ link.from_chain.tx_url(link.from_tx) }}">{{ link.from_tx | short }}</a><br>{{ link.from_address }}</td>
-      <td class="mono small">{{ link.to_chain.value if link.to_chain else link.to_chain_code + " (unsupported chain)" }}<br>{% if link.to_tx and link.to_chain %}<a href="{{ link.to_chain.tx_url(link.to_tx) }}">{{ link.to_tx | short }}</a>{% else %}outbound pending{% endif %}<br>{{ link.to_address }}</td>
-      <td class="small">{{ link.asset_in }} → {{ link.asset_out }}<div class="muted">memo {{ link.memo }}</div></td>
+      <td class="mono small">{{ link.to_chain.value if link.to_chain else link.to_chain_code + " (unsupported chain)" }}<br>{% if link.to_tx and link.to_chain %}<a href="{{ link.to_chain.tx_url(link.to_tx) }}">{{ link.to_tx | short }}</a>{% else %}outbound not yet sent{% endif %}<br>{{ link.to_address or "recipient unresolved" }}{% if link.recipient_basis %}<div class="muted">recipient: {{ link.recipient_basis }}</div>{% endif %}</td>
+      <td class="small">{{ link.asset_in }} → {{ link.asset_out }}{% if link.amount_out %}<div>{{ link.amount_out }}</div>{% endif %}{% if link.memo %}<div class="muted">{{ link.memo }}</div>{% endif %}</td>
       <td class="small">{{ {True: "confirmed", False: "NOT FOUND", None: "not confirmed"}[link.destination_confirmed] }}{% if link.destination_detail %}<div class="muted">{{ link.destination_detail }}</div>{% endif %}<div class="muted mono">evidence {{ link.evidence_id[:12] }}</div></td>
     </tr>
     {% endfor %}
@@ -165,10 +165,10 @@
   {% if not trace.endpoints %}<p class="muted">No endpoints: {{ trace.coverage.subject_note or "nothing to follow" }}.</p>{% endif %}
   <table>
     <tr><th>#</th><th>Where the path ends</th><th>Address</th><th>Attribution</th><th>Confidence</th><th>Hops</th><th>Bottleneck</th><th>Flow risk</th></tr>
-    {% for e in trace.endpoints %}{% set sc = t.scores.get(e.id) %}{% set fr = t.flow_risks.get(e.id) %}
+    {% for g in t.groups %}{% set e = g.e %}{% set sc = g.best %}{% set fr = t.flow_risks.get(e.id) %}
     <tr>
       <td>{{ loop.index }}</td>
-      <td>{{ KIND_TEXT[e.kind] }}{% for n in e.notes %}<div class="small muted">{{ n }}</div>{% endfor %}</td>
+      <td>{{ KIND_TEXT[e.kind] }}{% if g.paths > 1 %}<div class="small">{{ g.paths }} paths end here (shortest shown; best confidence)</div>{% endif %}{% for n in e.notes %}<div class="small muted">{{ n }}</div>{% endfor %}</td>
       <td class="mono"><a href="{{ e.chain.address_url(e.address) }}">{{ e.address }}</a>
         {% if e.adjacent_address %}<div class="small muted">via {{ e.adjacent_address }}{% if e.adjacent_role %}<br>{{ e.adjacent_role }}{% endif %}</div>{% endif %}</td>
       <td>{% if e.attribution %}<span class="grade grade-{{ e.attribution.grade.value }}">{{ e.attribution.grade.value }}</span> {{ e.attribution.entity_name or "(conflict)" }} <span class="small muted">{{ e.attribution.rule }}</span>{% else %}<span class="muted">none</span>{% endif %}</td>
@@ -192,7 +192,7 @@
 
   {% if t.detailed %}<h3>Paths and checks</h3>{% endif %}
   {% for e in t.detailed %}
-  <h4>Path to endpoint {{ loop.index }} — {{ KIND_TEXT[e.kind] }}{% if e.attribution %}: {{ e.attribution.entity_name or "conflicted attribution" }}{% endif %}</h4>
+  <h4>Path {{ loop.index }} — {{ KIND_TEXT[e.kind] }}{% if e.attribution %}: {{ e.attribution.entity_name or "conflicted attribution" }}{% endif %} <span class="mono small">{{ e.address | short }}</span></h4>
   <table>
     <tr><th>Step</th><th>Time (UTC)</th><th>From → To</th><th>Amount</th><th>Transaction</th><th>Check</th></tr>
     {% for tid in e.path %}{% set tr = t.by_id[tid] %}{% set v = verifications.get(tid) %}
@@ -287,6 +287,7 @@
   {% set c = trace.coverage %}
   <table class="small">
     <tr><td>Addresses expanded</td><td>{{ c.addresses_expanded }} (budget {{ trace.params.max_expansions }}){% if c.budget_exhausted %} — <strong>budget exhausted; some paths were not followed</strong>{% endif %}</td></tr>
+    {% if c.windowed_histories %}<tr><td>Window-limited histories</td><td>{% for h in c.windowed_histories %}<div class="mono">{{ h }}</div>{% endfor %}<div class="small muted">Only transfers inside this window were examined. Earlier or later activity is not covered.</div></td></tr>{% endif %}
     <tr><td>Incomplete histories</td><td>{% if c.incomplete_histories %}{% for h in c.incomplete_histories %}<div class="mono">{{ h }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
     <tr><td>Branches pruned (largest kept)</td><td>{% if c.pruned %}{% for p in c.pruned %}<div><span class="mono">{{ p.address }}</span>: kept {{ p.kept }} of {{ p.candidates }}</div>{% endfor %}{% else %}none{% endif %}</td></tr>
     <tr><td>Transfers not followed</td><td>{{ c.excluded_time_order }} before value arrived (time order) · {{ c.excluded_dust }} below dust threshold · {{ c.excluded_unverified_asset }} in unverified token contracts · {{ c.excluded_other_asset }} in other assets</td></tr>
@@ -298,6 +299,7 @@
 
 <section>
   <h2>5. Request drafts</h2>
+  <p class="small muted">Drafts for the officer. In Sahyog-integrated deployments the officer approves and sends them in Sahyog; what happened afterwards (sent, acknowledged, replied, frozen …) is recorded in the case record (API / dashboard), not in this sealed report.</p>
   {% for d in findings.routing %}
   <h3>{{ d.target_name }} — {{ d.request_type.value.replace("_", " ") }} — <span class="status status-{{ d.status.value }}">{{ d.status.value.replace("_", " ") }}</span></h3>
   <pre>{{ d.draft_text }}</pre>

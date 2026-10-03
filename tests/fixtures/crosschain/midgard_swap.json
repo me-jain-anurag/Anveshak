@@ -1,0 +1,69 @@
+{
+ "actions": [
+  {
+   "date": "1790711687094200230",
+   "height": "28033729",
+   "in": [
+    {
+     "address": "thor145j86em232hwuh7h483eqe5shamnwp2wwqsg5j",
+     "coins": [
+      {
+       "amount": "294526",
+       "asset": "ETH~ETH"
+      }
+     ],
+     "txID": "6183937B021F6E4366268CD1B84D3386C321C9CA10ACC8FCB050ED31180ED338"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "",
+     "affiliateFee": "0",
+     "inPriceUSD": "2695.2246693181546",
+     "isStreamingSwap": false,
+     "liquidityFee": "2074276",
+     "memo": "=:BASE~ETH:thor145j86em232hwuh7h483eqe5shamnwp2wwqsg5j:294526/1/1",
+     "networkFees": [],
+     "outPriceUSD": "2690.6202132619483",
+     "swapSlip": "20",
+     "swapTarget": "294526",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "thor145j86em232hwuh7h483eqe5shamnwp2wwqsg5j",
+     "coins": [
+      {
+       "amount": "294860",
+       "asset": "BASE~ETH"
+      }
+     ],
+     "height": "28033729",
+     "txID": ""
+    },
+    {
+     "address": "thor145j86em232hwuh7h483eqe5shamnwp2wwqsg5j",
+     "coins": [
+      {
+       "amount": "294860",
+       "asset": "BASE~ETH"
+      }
+     ],
+     "txID": "6183937B021F6E4366268CD1B84D3386C321C9CA10ACC8FCB050ED31180ED338"
+    }
+   ],
+   "pools": [
+    "ETH.ETH",
+    "BASE.ETH"
+   ],
+   "status": "success",
+   "type": "swap"
+  }
+ ],
+ "count": "-1",
+ "meta": {
+  "nextPageToken": "280337299000000039",
+  "prevPageToken": "280337299000000039"
+ }
+}

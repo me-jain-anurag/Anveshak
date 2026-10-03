@@ -1,0 +1,334 @@
+{
+ "actions": [
+  {
+   "date": "1790711211938711623",
+   "height": "28033653",
+   "in": [
+    {
+     "address": "0x3eae40f3ca0c7c7f94535ff2f022ffd5a9d045cd",
+     "coins": [
+      {
+       "amount": "495000000000",
+       "asset": "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+      }
+     ],
+     "txID": "1AC8E2F9CA7A19E325989711270541806917462BCC737DFD6145BBC799702CBD"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "sto",
+     "affiliateFee": "0",
+     "inPriceUSD": "0.9957941618893819",
+     "isStreamingSwap": true,
+     "liquidityFee": "1483899645",
+     "memo": "=:b:bc1q4q6leldnlknj2vu7x3465x4mzneckqn284cr94:5834951/0/3:sto:0",
+     "networkFees": [
+      {
+       "amount": "2759",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "outPriceUSD": "83429.57522336084",
+     "streamingSwapMeta": {
+      "count": "3",
+      "depositedCoin": {
+       "amount": "495000000000",
+       "asset": "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+      },
+      "inCoin": {
+       "amount": "495000000000",
+       "asset": "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+      },
+      "interval": "0",
+      "lastHeight": "28033655",
+      "outCoin": {
+       "amount": "5899866",
+       "asset": "BTC.BTC"
+      },
+      "outEstimation": "5906088",
+      "quantity": "3"
+     },
+     "swapSlip": "23",
+     "swapTarget": "1944984",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "bc1q4q6leldnlknj2vu7x3465x4mzneckqn284cr94",
+     "coins": [
+      {
+       "amount": "5897107",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "height": "28033665",
+     "txID": "8F2A83791311C88164CCE57617AE93FF12D01257268FA2D24D48C8825AAD5BE5"
+    }
+   ],
+   "pools": [
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+    "BTC.BTC"
+   ],
+   "status": "success",
+   "type": "swap"
+  },
+  {
+   "date": "1790711123095319013",
+   "height": "28033639",
+   "in": [
+    {
+     "address": "ltc1qy9l3kztvw3u59gtrcxt5zlcvq0yrvzq40hpvgn",
+     "coins": [
+      {
+       "amount": "5000000",
+       "asset": "LTC.LTC"
+      }
+     ],
+     "txID": "13F912A4791843A4C3BA711BEBE34172D6280CBEE937B954C02E333788B36FC9"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "-_/t1",
+     "affiliateFee": "0",
+     "inPriceUSD": "67.75314729946",
+     "isStreamingSwap": true,
+     "liquidityFee": "883077",
+     "memo": "=:b:bc1q7mg57jhjegtzhfc6q3j6e9yvkazkxwmzdp5war:1227/0/0:-_/t1:0/70",
+     "networkFees": [
+      {
+       "amount": "2758",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "outPriceUSD": "83621.25184004132",
+     "swapSlip": "20",
+     "swapTarget": "1227",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "thor1dl7un46w7l7f3ewrnrm6nq58nerjtp0dradjtd",
+     "affiliate": true,
+     "coins": [
+      {
+       "amount": "3061781",
+       "asset": "THOR.RUNE"
+      }
+     ],
+     "height": "28033639",
+     "txID": ""
+    },
+    {
+     "address": "bc1q7mg57jhjegtzhfc6q3j6e9yvkazkxwmzdp5war",
+     "coins": [
+      {
+       "amount": "1245",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "height": "28033645",
+     "txID": "C97C773A291EFB7B8974FC6100B9513A6F44F3AE1801BE5BB0D3085EEDE98943"
+    }
+   ],
+   "pools": [
+    "LTC.LTC",
+    "BTC.BTC"
+   ],
+   "status": "success",
+   "type": "swap"
+  },
+  {
+   "date": "1790710398509285485",
+   "height": "28033523",
+   "in": [
+    {
+     "address": "0x3eae40f3ca0c7c7f94535ff2f022ffd5a9d045cd",
+     "coins": [
+      {
+       "amount": "5000000000",
+       "asset": "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+      }
+     ],
+     "txID": "F1901501AFD5ABA4AB899667E9C82E5D6F5757104801F331695FB48B7B5ED573"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "sto",
+     "affiliateFee": "0",
+     "inPriceUSD": "0.9970843484668661",
+     "isStreamingSwap": false,
+     "liquidityFee": "12995753",
+     "memo": "=:b:bc1q7jhal2w8dpe8vgkhy80fwxcm0x4dxsuquzpkpj:55601:sto:0",
+     "networkFees": [
+      {
+       "amount": "2760",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "outPriceUSD": "83529.75714278856",
+     "swapSlip": "20",
+     "swapTarget": "55601",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "bc1q7jhal2w8dpe8vgkhy80fwxcm0x4dxsuquzpkpj",
+     "coins": [
+      {
+       "amount": "56879",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "height": "28033537",
+     "txID": "DB8C560CA11416A5D924DA753130409510A7ED6085D5144FEB3C0A179F84810C"
+    }
+   ],
+   "pools": [
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+    "BTC.BTC"
+   ],
+   "status": "success",
+   "type": "swap"
+  },
+  {
+   "date": "1790710336995837292",
+   "height": "28033513",
+   "in": [
+    {
+     "address": "bc1q2qmrgxkae2drvwx357wmn9ggwf5cjrt0swxr67",
+     "coins": [
+      {
+       "amount": "2657037",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "txID": "847B8CF4C11350CC54189A0098491DFBCD8B9047B29130A3559851E531EBAD13"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "",
+     "affiliateFee": "0",
+     "inPriceUSD": "83388.55320756031",
+     "isStreamingSwap": true,
+     "liquidityFee": "599540829",
+     "memo": "=:TRON.USDT:TVEayVhxeoS3YVT9NVzHnfN2mBp9afYSYn:217240679936/1/0",
+     "networkFees": [
+      {
+       "amount": "351243600",
+       "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+      }
+     ],
+     "outPriceUSD": "0.9945621799061998",
+     "streamingSwapMeta": {
+      "count": "9",
+      "depositedCoin": {
+       "amount": "2657037",
+       "asset": "BTC.BTC"
+      },
+      "inCoin": {
+       "amount": "2657037",
+       "asset": "BTC.BTC"
+      },
+      "interval": "1",
+      "lastHeight": "28033521",
+      "outCoin": {
+       "amount": "221345174200",
+       "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+      },
+      "outEstimation": "220871247300",
+      "quantity": "9"
+     },
+     "swapSlip": "21",
+     "swapTarget": "24137907833",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "TVEayVhxeoS3YVT9NVzHnfN2mBp9afYSYn",
+     "coins": [
+      {
+       "amount": "220993930600",
+       "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+      }
+     ],
+     "height": "28033526",
+     "txID": "0E680CA6DF9EF6DBC4409DEAB88756413FE198EE53404D1C3E7BDB542696600E"
+    }
+   ],
+   "pools": [
+    "BTC.BTC",
+    "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+   ],
+   "status": "success",
+   "type": "swap"
+  },
+  {
+   "date": "1790710336995837292",
+   "height": "28033513",
+   "in": [
+    {
+     "address": "bc1qr3h4unayhgv3kjg9c5kq3dgu547undx8ugnqx5",
+     "coins": [
+      {
+       "amount": "1434856",
+       "asset": "BTC.BTC"
+      }
+     ],
+     "txID": "F322285DEC69316CF4D8A786A6AB68A364A661021EC5271DB5A32E68CFF31D2D"
+    }
+   ],
+   "metadata": {
+    "swap": {
+     "affiliateAddress": "",
+     "affiliateFee": "0",
+     "inPriceUSD": "83388.55320756031",
+     "isStreamingSwap": false,
+     "liquidityFee": "313342664",
+     "memo": "=:e:0xb8610C1aD443f8333badA8010a9074ff4Eb8Dc6F:43153690",
+     "networkFees": [
+      {
+       "amount": "9207",
+       "asset": "ETH.ETH"
+      }
+     ],
+     "outPriceUSD": "2732.5988679232005",
+     "swapSlip": "20",
+     "swapTarget": "43153690",
+     "txType": "swap"
+    }
+   },
+   "out": [
+    {
+     "address": "0xb8610c1ad443f8333bada8010a9074ff4eb8dc6f",
+     "coins": [
+      {
+       "amount": "43957310",
+       "asset": "ETH.ETH"
+      }
+     ],
+     "height": "28033523",
+     "txID": "5144B07B91B132EE8DF10513D99E9B9D7F76A0323BCC1819D4B59C93CE718E3A"
+    }
+   ],
+   "pools": [
+    "BTC.BTC",
+    "ETH.ETH"
+   ],
+   "status": "success",
+   "type": "swap"
+  }
+ ],
+ "count": "-1",
+ "meta": {
+  "nextPageToken": "280335139000000244",
+  "prevPageToken": "280336539000000009"
+ }
+}

@@ -16,6 +16,7 @@ class MemorySource(ChainSource):
         balances: dict[tuple[str, str], int] | None = None,
         incomplete: set[str] | None = None,
         tampered: dict[str, Transfer] | None = None,
+        tx_counts: dict[str, int] | None = None,
     ):
         self.chain = chain
         self._transfers = list(transfers)
@@ -25,6 +26,7 @@ class MemorySource(ChainSource):
         # transfer id -> what the "transaction-level endpoint" returns instead (to test MISMATCH)
         self._tampered = tampered or {}
         self.history_calls: list[str] = []
+        self._tx_counts = tx_counts or {}
 
     def history(self, address: str) -> AddressHistory:
         self.history_calls.append(address)
@@ -50,6 +52,12 @@ class MemorySource(ChainSource):
         known = {t.id for t in self._transfers}
         status = VerificationStatus.VERIFIED if transfer.id in known else VerificationStatus.MISMATCH
         return Verification(transfer_id=transfer.id, status=status, method="memory", block_number=transfer.block_number)
+
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        return [t for t in self._transfers if t.tx_hash == tx_hash]
+
+    def tx_count(self, address: str) -> int | None:
+        return self._tx_counts.get(address)
 
     def is_contract(self, address: str) -> bool | None:
         return address in self._contracts

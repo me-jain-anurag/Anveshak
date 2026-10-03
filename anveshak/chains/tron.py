@@ -206,6 +206,32 @@ class TronGridSource(ChainSource):
         except (SourceError, AddressError) as exc:
             return Verification(transfer_id=transfer.id, status=VerificationStatus.ERROR, method=method, detail=str(exc))
 
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        info, info_ev = self._post("/wallet/gettransactioninfobyid", {"value": tx_hash})
+        if not info.get("id"):
+            return []
+        ts = utc_from_timestamp(int(info.get("blockTimeStamp") or 0) / 1000)
+        block = info.get("blockNumber")
+        pending: list[_Pending] = []
+        for log in info.get("log") or []:
+            topics = [t.lower() for t in log.get("topics") or []]
+            if len(topics) != 3 or topics[0] != TRANSFER_TOPIC:
+                continue
+            amount = int(log.get("data") or "0", 16)
+            if amount == 0:
+                continue
+            contract = self._address(log.get("address", ""))
+            pending.append(_Pending(tx_hash=tx_hash.lower(), kind=TransferKind.TOKEN, sender=self._address(topics[1][-40:]), receiver=self._address(topics[2][-40:]),
+                                    asset=self.registry.token(Chain.TRON, contract, "", 0), amount=amount, timestamp=ts, block_number=block, evidence_id=info_ev))
+        tx, tx_ev = self._post("/wallet/gettransactionbyid", {"value": tx_hash})
+        ret = (tx.get("ret") or [{}])[0].get("contractRet")
+        contract = ((tx.get("raw_data") or {}).get("contract") or [{}])[0]
+        value = (contract.get("parameter") or {}).get("value") or {}
+        if ret == "SUCCESS" and contract.get("type") == "TransferContract" and int(value.get("amount") or 0) > 0:
+            pending.append(_Pending(tx_hash=tx_hash.lower(), kind=TransferKind.NATIVE, sender=self._address(value["owner_address"]), receiver=self._address(value["to_address"]),
+                                    asset=self.registry.native(Chain.TRON), amount=int(value["amount"]), timestamp=ts, block_number=block, evidence_id=tx_ev))
+        return assign_occurrence_positions(pending)
+
     def balance(self, address: str, asset: Asset) -> Balance | None:
         address = normalize(Chain.TRON, address)
         data, evidence_id = self._get(f"/v1/accounts/{address}", {"only_confirmed": "true"})

@@ -76,12 +76,15 @@ class EsploraSource(ChainSource):
         outputs = [(i, self._addr(v.get("scriptpubkey_address")), int(v.get("value") or 0)) for i, v in enumerate(tx.get("vout") or [])]
         return inputs, outputs, int(status["block_height"]), int(status["block_time"])
 
-    def history(self, address: str) -> AddressHistory:
-        address = normalize(Chain.BITCOIN, address)
-        stats, _ = self._get(f"/address/{address}")
+    def tx_count(self, address: str) -> int | None:
+        stats, _ = self._get(f"/address/{normalize(Chain.BITCOIN, address)}")
         if not isinstance(stats, dict):
             raise SourceError("Esplora returned an unexpected address payload")
-        tx_count = int((stats.get("chain_stats") or {}).get("tx_count") or 0)
+        return int((stats.get("chain_stats") or {}).get("tx_count") or 0)
+
+    def history(self, address: str) -> AddressHistory:
+        address = normalize(Chain.BITCOIN, address)
+        tx_count = self.tx_count(address)
 
         txs: list[tuple[dict, str]] = []
         path = f"/address/{address}/txs/chain"
@@ -128,6 +131,26 @@ class EsploraSource(ChainSource):
         complete = len(txs) >= tx_count
         note = None if complete else f"{tx_count} confirmed transactions, newest {len(txs)} fetched"
         return AddressHistory(chain=Chain.BITCOIN, address=address, transfers=dedupe_sorted(transfers), complete=complete, note=note)
+
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        tx, evidence_id = self._get(f"/tx/{tx_hash}")
+        if not isinstance(tx, dict):
+            return []
+        parsed = self._parse_tx(tx)
+        if parsed is None:
+            return []
+        inputs, outputs, height, block_time = parsed
+        ctx = UtxoContext(input_addresses=tuple(sorted(set(inputs))), output_count=len(outputs), coinjoin_like=is_coinjoin_like(inputs, [v for _, _, v in outputs]))
+        native = self.registry.native(Chain.BITCOIN)
+        out = []
+        for index, receiver, value in outputs:
+            if not receiver or value <= 0:
+                continue
+            for sender in sorted(set(inputs)):
+                if sender != receiver:
+                    out.append(Transfer(chain=Chain.BITCOIN, tx_hash=tx["txid"], kind=TransferKind.UTXO_OUTPUT, position=index, sender=sender, receiver=receiver,
+                                        asset=native, amount=value, block_number=height, timestamp=utc_from_timestamp(block_time), evidence_id=evidence_id, utxo=ctx))
+        return out
 
     def verify(self, transfer: Transfer) -> Verification:
         method = "esplora-tx"

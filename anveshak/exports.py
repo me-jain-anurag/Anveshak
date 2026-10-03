@@ -45,7 +45,7 @@ def _nodes_edges(result: CaseResult) -> tuple[dict[tuple[str, str], dict], list[
             if p.tags:
                 n["tags"] = ",".join(p.tags)
     for link in f.crosschain_links:
-        if link.to_chain is None:
+        if link.to_chain is None or not link.to_address:
             continue
         node(link.to_chain.value, link.to_address)
         edges.append(

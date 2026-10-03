@@ -56,6 +56,15 @@ class ChainSource(ABC):
         """Current balance of `asset`, or None if unsupported."""
         return None
 
+    def tx_count(self, address: str) -> int | None:
+        """Confirmed transaction count of an address, when the source can give it cheaply."""
+        return None
+
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        """All value transfers recorded in one transaction (transaction-level endpoint), or
+        None if unsupported. Used to read bridge payouts and confirm cross-chain links."""
+        return None
+
 
 @dataclass
 class _Pending:
@@ -119,6 +128,7 @@ class CachingSource(ChainSource):
         self.inner = inner
         self.chain = inner.chain
         self._histories: dict[str, AddressHistory] = {}
+        self._counts: dict[str, int | None] = {}
 
     def history(self, address: str) -> AddressHistory:
         if address not in self._histories:
@@ -133,3 +143,11 @@ class CachingSource(ChainSource):
 
     def balance(self, address: str, asset: Asset) -> Balance | None:
         return self.inner.balance(address, asset)
+
+    def tx_count(self, address: str) -> int | None:
+        if address not in self._counts:
+            self._counts[address] = self.inner.tx_count(address)
+        return self._counts[address]
+
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        return self.inner.tx_transfers(tx_hash)

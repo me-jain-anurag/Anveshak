@@ -16,16 +16,18 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from . import __version__, demo
 from .attribution import Attributor
-from .case import CaseRequest, CaseResult, DataMode, Engine, Subject, ensure_dirs, load_standard
+from .case import CaseRequest, CaseResult, DataMode, Engine, Subject, ensure_dirs, live_fetcher, load_standard
 from .chain import Chain
 from .config import load_settings
 from .domain import Category, Direction, SourceClass
 from .errors import AnveshakError
-from .labels.importers import DEFAULT_GRAPHSENSE_PACKS, attestation_label, import_graphsense, import_ofac
+from .evidence import EvidenceStore, ReplayFetcher
+from .labels.importers import DEFAULT_GRAPHSENSE_PACKS, attestation_label, import_graphsense, import_ofac, import_thorchain
 from .labels.store import LabelStore, write_jsonl
 from .report import write_report
 from .storage import CaseStore
@@ -67,6 +69,7 @@ def _print_summary(result: CaseResult, report_path, report_hash: str) -> None:
             + (", BUDGET EXHAUSTED" if c.budget_exhausted else "")
             + (f", {len(c.incomplete_histories)} incomplete histories" if c.incomplete_histories else "")
             + (f", {len(c.source_errors)} source errors" if c.source_errors else "")
+            + (", window-limited (RPC log scan)" if c.windowed_histories else "")
         )
     if f.crosschain_links:
         print("\ncross-chain links:")
@@ -119,19 +122,40 @@ def cmd_trace(args) -> int:
         follow_all_assets=args.follow_all_assets,
         requested_by=args.requested_by,
     )
-    engine = Engine(DataMode.LIVE, labels, registry, directory, settings=settings)
+    from .case import chains_needing_since
+
+    needs = chains_needing_since(settings, {chain})
+    if needs and request.since is None:
+        print(f"invalid input: --since is required for {chain.value}: traced by a window-limited public RPC log scan", file=sys.stderr)
+        return 2
+    pack = Path(args.pack) if args.pack else None
+    fetcher = live_fetcher(settings, EvidenceStore(pack / "evidence" if pack else settings.evidence_dir))
+    engine = Engine(DataMode.LIVE, labels, registry, directory, settings=settings, fetcher=fetcher)
     result = engine.run(request)
-    path, digest = write_report(result, settings.reports_dir)
+    path, digest = write_report(result, pack or settings.reports_dir)
+    if pack:
+        (pack / "case.json").write_text(result.model_dump_json(indent=2), encoding="utf-8", newline="\n")
+        (pack / "PACK.json").write_text(json.dumps({
+            "case_id": result.case_id, "case_reference": request.case_reference, "findings_hash": result.findings_hash,
+            "label_snapshot": result.findings.label_snapshot, "evidence_objects": len(fetcher.used),
+            "recorded_at": datetime.now(timezone.utc).isoformat(), "anveshak_version": __version__,
+        }, indent=2), encoding="utf-8", newline="\n")
     store = CaseStore(settings.db_path)
     store.create(result.case_id, request.case_reference, "live", request.model_dump(mode="json"))
     store.set_done(result.case_id, result.model_dump_json(), result.findings_hash)
     _print_summary(result, path, digest)
+    if pack:
+        print(f"evidence pack  {pack} ({len(fetcher.used)} evidence objects) — replay offline with: anveshak replay --pack {pack}")
     return 0
 
 
 def cmd_replay(args) -> int:
     settings = load_settings()
-    path = settings.reports_dir / f"{args.case_id}.json"
+    pack = Path(args.pack) if args.pack else None
+    if pack is None and not args.case_id:
+        print("give a case id or --pack DIR", file=sys.stderr)
+        return 2
+    path = pack / "case.json" if pack else settings.reports_dir / f"{args.case_id}.json"
     if not path.exists():
         print(f"no stored findings at {path}", file=sys.stderr)
         return 2
@@ -145,7 +169,8 @@ def cmd_replay(args) -> int:
         problems.append("label set differs from the one used originally (label snapshot hash mismatch)")
     if directory.snapshot_hash() != original.findings.directory_snapshot:
         problems.append("VASP directory differs from the one used originally")
-    engine = Engine(DataMode.REPLAY, labels, registry, directory, settings=settings)
+    fetcher = ReplayFetcher(EvidenceStore(pack / "evidence")) if pack else None
+    engine = Engine(DataMode.REPLAY, labels, registry, directory, settings=settings, fetcher=fetcher)
     replayed = engine.run(original.findings.request, case_id=original.case_id)
     # Replay runs in REPLAY mode; compare with the mode field normalised.
     replay_findings = replayed.findings.model_copy(update={"data_mode": DataMode.LIVE})
@@ -160,12 +185,29 @@ def cmd_replay(args) -> int:
     return 0 if same else 1
 
 
+def cmd_pack(args) -> int:
+    """Load a recorded evidence pack into the local case database so the dashboard shows it offline."""
+    settings = load_settings()
+    ensure_dirs(settings)
+    pack = Path(args.dir)
+    result = CaseResult.model_validate_json((pack / "case.json").read_text(encoding="utf-8"))
+    store = CaseStore(settings.db_path)
+    if store.get(result.case_id) is None:
+        store.create(result.case_id, result.findings.request.case_reference, result.findings.data_mode.value, result.findings.request.model_dump(mode="json"))
+    store.set_done(result.case_id, result.model_dump_json(), result.findings_hash)
+    write_report(result, settings.reports_dir)
+    print(f"loaded {result.case_id} ({result.findings.request.case_reference}); findings hash {result.findings_hash}")
+    return 0
+
+
 def cmd_labels(args) -> int:
     settings = load_settings()
     root = settings.data_dir / "labels" / "imported"
     if args.labels_cmd == "import":
         if args.dataset == "graphsense":
             manifest = import_graphsense(root / "graphsense", packs=args.pack or DEFAULT_GRAPHSENSE_PACKS)
+        elif args.dataset == "thorchain":
+            manifest = import_thorchain(root / "thorchain")
         else:
             manifest = import_ofac(root / "ofac")
         for f in manifest["files"]:
@@ -192,11 +234,13 @@ def cmd_labels(args) -> int:
         label = attestation_label(
             Chain(args.chain), args.address, args.entity_id, args.entity_name, Category(args.category),
             args.document_ref, date.fromisoformat(args.as_of), SourceClass(args.source_class),
+            denies=args.denies, reply_id=args.reply_id,
         )
         path = settings.var_dir / "labels" / "attestations.jsonl"
         existing = list(LabelStore.load([path]).all()) if path.exists() else []
         write_jsonl(path, [*existing, label])
-        print(f"recorded: {label.chain.value} {label.address} -> {label.entity_name} ({label.source_class.value}) in {path}")
+        verb = "NOT owned by (denial)" if label.denies else "->"
+        print(f"recorded: {label.chain.value} {label.address} {verb} {label.entity_name} ({label.source_class.value}) in {path}")
         return 0
     return 2
 
@@ -252,6 +296,41 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_clients(args) -> int:
+    from .clients import ROLE_PERMISSIONS, ClientRegistry, add_client
+
+    settings = load_settings()
+    path = settings.clients_path
+    if args.clients_cmd == "add":
+        key = add_client(path, args.client_id, args.role, args.agency, args.ip or [], args.rate_limit)
+        print(f"client {args.client_id} added to {path}")
+        print(f"API key (shown once, store it securely): {key}")
+        return 0
+    registry = ClientRegistry.from_settings(path, settings.api_token)
+    if registry.open_mode:
+        print("no API clients configured: the API is open (development only)")
+    for c in registry.clients:
+        print(f"{c.client_id:28} roles={','.join(c.roles):24} agency={c.agency_id or '-':10} ips={','.join(c.ip_allowlist) or 'any'} rate={c.rate_limit_per_minute}/min")
+    print("roles: " + "; ".join(f"{r}: {', '.join(sorted(p))}" for r, p in ROLE_PERMISSIONS.items()))
+    return 0
+
+
+def cmd_benchmark(args) -> int:
+    from .benchmark import run
+
+    settings = load_settings()
+    root = Path(__file__).resolve().parent.parent
+    mode = DataMode.REPLAY if args.replay else DataMode.LIVE
+    out = run(
+        settings, Path(args.cases) if args.cases else root / "benchmarks" / "cases", mode, args.case or None,
+        Path(args.results) if args.results else root / "benchmarks" / "results" / f"{mode.value}.json",
+        None if args.no_doc else root / "docs" / "benchmark.md",
+    )
+    s = out["summary"]
+    print(f"hit@1 {s['hit_at_1']}/{s['ran']} · hit@any {s['hit_at_any']}/{s['ran']} · wrong {s['wrong_vasp_cases']} · not found {s['not_found']} · skipped {s['skipped']} · errors {s['errors']}")
+    return 0
+
+
 def cmd_serve(args) -> int:
     import uvicorn
 
@@ -280,22 +359,30 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_argument("--until")
     t.add_argument("--follow-all-assets", action="store_true")
     t.add_argument("--requested-by")
+    t.add_argument("--pack", help="record a self-contained evidence pack in this directory (evidence, case.json, report)")
     t.set_defaults(func=cmd_trace)
 
     r = sub.add_parser("replay", help="re-run a live case from stored evidence and compare findings hashes")
-    r.add_argument("case_id")
+    r.add_argument("case_id", nargs="?")
+    r.add_argument("--pack", help="replay an evidence pack directory (no network)")
     r.set_defaults(func=cmd_replay)
+
+    pk = sub.add_parser("pack", help="evidence packs")
+    pksub = pk.add_subparsers(dest="pack_cmd", required=True)
+    pl = pksub.add_parser("load", help="load a recorded pack into the case database (for the dashboard)")
+    pl.add_argument("dir")
+    pk.set_defaults(func=cmd_pack)
 
     lab = sub.add_parser("labels", help="label datasets")
     lsub = lab.add_subparsers(dest="labels_cmd", required=True)
     imp = lsub.add_parser("import")
-    imp.add_argument("dataset", choices=["graphsense", "ofac"])
+    imp.add_argument("dataset", choices=["graphsense", "ofac", "thorchain"])
     imp.add_argument("--pack", action="append", help="GraphSense pack file name (repeatable); default: curated list")
     lsub.add_parser("stats")
     lk = lsub.add_parser("lookup")
     lk.add_argument("--chain", required=True, choices=[c.value for c in Chain])
     lk.add_argument("--address", required=True)
-    at = lsub.add_parser("attest", help="record a VASP's written confirmation of an address")
+    at = lsub.add_parser("attest", help="record a VASP's written confirmation (or denial) of an address")
     at.add_argument("--chain", required=True, choices=[c.value for c in Chain])
     at.add_argument("--address", required=True)
     at.add_argument("--entity-id", required=True)
@@ -304,6 +391,8 @@ def build_parser() -> argparse.ArgumentParser:
     at.add_argument("--document-ref", required=True, help="reference of the reply/document, e.g. 'Sahyog reply REF-123 dated 2026-10-02'")
     at.add_argument("--as-of", required=True, help="YYYY-MM-DD")
     at.add_argument("--source-class", default="entity_attested", choices=["entity_attested", "authority"])
+    at.add_argument("--denies", action="store_true", help="the reply states the address is NOT the entity's (rule G-N1)")
+    at.add_argument("--reply-id", help="Sahyog reply id, if the reply came through Sahyog")
     lab.set_defaults(func=cmd_labels)
 
     w = sub.add_parser("worker", help="run a case worker against the shared case database")
@@ -318,6 +407,25 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("case_id")
     x.add_argument("--format", choices=["neo4j", "graphml"], default="neo4j")
     x.set_defaults(func=cmd_export)
+
+    cl = sub.add_parser("clients", help="API clients: keys, roles, agencies (ADR-0023)")
+    clsub = cl.add_subparsers(dest="clients_cmd", required=True)
+    ca = clsub.add_parser("add", help="create a client and print its key once")
+    ca.add_argument("--client-id", required=True)
+    ca.add_argument("--role", action="append", required=True, choices=["sahyog", "investigator", "supervisor", "auditor", "admin"])
+    ca.add_argument("--agency", help="agency id (required for investigator/supervisor)")
+    ca.add_argument("--ip", action="append", help="allowed source network, e.g. 10.20.0.0/16 (repeatable)")
+    ca.add_argument("--rate-limit", type=int, default=120, help="requests per minute")
+    clsub.add_parser("list")
+    cl.set_defaults(func=cmd_clients)
+
+    b = sub.add_parser("benchmark", help="run the ground-truth benchmark (benchmarks/cases) and update docs/benchmark.md")
+    b.add_argument("--case", action="append", help="run only this case id (repeatable)")
+    b.add_argument("--cases", help="directory of case files")
+    b.add_argument("--replay", action="store_true", help="re-run from recorded evidence instead of live data")
+    b.add_argument("--results", help="where to write the JSON results")
+    b.add_argument("--no-doc", action="store_true", help="do not update docs/benchmark.md")
+    b.set_defaults(func=cmd_benchmark)
 
     s = sub.add_parser("serve", help="run the HTTP API and dashboard")
     s.add_argument("--host", default="127.0.0.1")

@@ -57,6 +57,9 @@ class TraceParams(Frozen):
     follow_all_assets: bool = False
     include_unverified_assets: bool = False
     check_balances: bool = True
+    # R-COSPEND-SERVICE: an address spent together with an address this busy is treated as part
+    # of the same (likely unlabelled) service, and not expanded further.
+    high_activity_tx_count: int = Field(default=1000, ge=50)
 
 
 class PruneRecord(Frozen):
@@ -76,6 +79,7 @@ class Coverage(Frozen):
     budget_exhausted: bool
     source_errors: tuple[str, ...]
     subject_note: str | None = None
+    windowed_histories: tuple[str, ...] = ()  # histories examined only inside a time window (RPC log scans)
 
 
 class BalanceObservation(Frozen):
@@ -145,6 +149,7 @@ class Tracer:
         attributions: dict[str, Attribution] = {}
         risks: dict[str, RiskHit] = {}
         incomplete: list[str] = []
+        windowed: list[str] = []
         pruned: list[PruneRecord] = []
         source_errors: list[str] = []
         excluded = {"unverified": 0, "dust": 0, "other_asset": 0, "time_order": 0}
@@ -184,6 +189,8 @@ class Tracer:
                 continue
             expansions += 1
             histories[node.address] = history
+            if history.window_start is not None:
+                windowed.append(f"{node.address}: {history.note}")
 
             if not history.complete:
                 incomplete.append(f"{node.address}: {history.note}")
@@ -214,6 +221,23 @@ class Tracer:
                         continue
 
             candidates = self._candidates(node, history, params, out, excluded)
+
+            if node.hops > 0 and chain is Chain.BITCOIN:
+                busy = self._cospent_with_busy(node, candidates, out, histories, params, source_errors)
+                if busy is not None:
+                    co, count, tx = busy
+                    endpoint(
+                        EndpointKind.HIGH_ACTIVITY,
+                        node.address,
+                        node.hops,
+                        node.path,
+                        notes=(
+                            f"spent in transaction {tx} together with {co} ({f'{count} confirmed transactions' if count is not None else 'history beyond the fetch cap'}); common-input ownership "
+                            "(as D-COSPEND) puts this address in the same likely unlabelled service, so its other funds are not followed "
+                            "(R-COSPEND-SERVICE) — review manually",
+                        ),
+                    )
+                    continue
 
             coinjoin_txs = sorted({t.tx_hash for t in candidates if t.utxo is not None and t.utxo.coinjoin_like})
             if coinjoin_txs:
@@ -323,6 +347,7 @@ class Tracer:
                 budget_exhausted=budget_exhausted,
                 source_errors=tuple(source_errors),
                 subject_note=subject_note,
+                windowed_histories=tuple(windowed),
             ),
         )
 
@@ -359,6 +384,38 @@ class Tracer:
                 continue
             result.append(t)
         return result
+
+    def _cospent_with_busy(
+        self, node: _Node, candidates: list[Transfer], out: bool, histories: dict[str, AddressHistory], params: TraceParams, errors: list[str]
+    ) -> tuple[str, int | None, str] | None:
+        """R-COSPEND-SERVICE (Bitcoin). Backward: the transaction that brought the trace here
+        spent this address together with other inputs. Forward: the transactions in which this
+        address spends the value. If any co-input is a high-activity address (an exchange hot
+        wallet, typically), every input of that transaction has one controller (the same
+        common-input rule as D-COSPEND, never applied to CoinJoin-like transactions), so
+        following this address further would follow the service's pooled custody."""
+        spends = [node.via] if not out and node.via is not None else [t for t in candidates if t.sender == node.address]
+        checked = 0
+        for t in sorted({s.tx_hash: s for s in spends if s.utxo is not None and not s.utxo.coinjoin_like}.values(), key=lambda s: s.order_key):
+            for co in t.utxo.input_addresses:
+                if co == node.address:
+                    continue
+                known = histories.get(co)
+                if known is not None:
+                    if known.complete:
+                        continue
+                    return co, None, t.tx_hash  # already seen: history beyond the fetch cap
+                if checked >= 8:  # cap the extra lookups per address
+                    return None
+                checked += 1
+                try:
+                    count = self.source.tx_count(co)
+                except SourceError as exc:
+                    errors.append(f"{co}: {exc}")
+                    continue
+                if count is not None and count >= params.high_activity_tx_count:
+                    return co, count, t.tx_hash
+        return None
 
     @staticmethod
     def _previous_address(node: _Node, transfers: dict[str, Transfer], out: bool) -> str | None:

@@ -10,13 +10,17 @@ full nodes for all of them is out of scope for a first deployment.
 
 ## Decision
 
-- One interface, `ChainSource`: `history`, `verify`, `is_contract`, `balance`.
+- One interface, `ChainSource`: `history`, `verify`, `is_contract`, `balance`, and `tx_transfers`
+  (every transfer in one transaction; used to confirm cross-chain destinations, added 2026-10-04).
+- Update 2026-10-04 (ADR-0021): EVM chains outside the Etherscan free tier are traced without a
+  key by a window-limited JSON-RPC log scan; the backend per chain is chosen by `evm_backend`.
 - Adapters and sources (formats verified against live responses on 2026-09-30):
 
 | Chains | Adapter | Source | Note |
 |---|---|---|---|
 | Ethereum, Polygon, Arbitrum | `EtherscanSource` | Etherscan API V2, one key | free tier |
-| BNB Chain, Base, OP Mainnet, Avalanche | `EtherscanSource` | Etherscan API V2 | paid plan or compatible provider (`ETHERSCAN_BASE_URL`) |
+| BNB Chain, Base, OP Mainnet, Avalanche | `EtherscanSource` | Etherscan API V2 | paid plan (`ETHERSCAN_PAID=1`) or compatible provider (`ETHERSCAN_BASE_URL`) |
+| BNB Chain, Base, OP Mainnet, Avalanche (and any EVM chain via `ANVESHAK_RPC_<CHAIN>`) | `RpcLogSource` | public or own JSON-RPC | no key; window-limited `eth_getLogs` scan of verified tokens, needs the incident time (ADR-0021) |
 | Tron | `TronGridSource` | TronGrid v1 + full-node API | key optional |
 | Bitcoin | `EsploraSource` | blockstream.info Esplora | no key |
 | Solana | `SolanaRpcSource` | any JSON-RPC endpoint | public endpoint rate-limited; provider URL recommended |

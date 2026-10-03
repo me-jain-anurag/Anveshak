@@ -134,3 +134,62 @@ def test_every_attribution_is_grounded():
 
     with pytest.raises(ValueError):
         Attribution(chain=E, address=A1, entity_id="x", entity_name="x", category=None, grade=Grade.A, rule="G-A1", explanation="")
+
+
+# --------------------------------------------------------------------------- G-N1: formal denials
+
+
+def _deny(entity="ex1", as_of=None, klass=SourceClass.ENTITY_ATTESTED, source="Sahyog reply R-1"):
+    from datetime import date
+
+    return label(E, A1, klass, source, entity=entity, category=None, denies=True, as_of=as_of or date(2026, 3, 1), text=f"denied by {entity}")
+
+
+def _confirm(entity="ex1", as_of=None):
+    from datetime import date
+
+    return label(E, A1, SourceClass.ENTITY_ATTESTED, "Sahyog reply R-2", entity=entity, as_of=as_of or date(2026, 3, 1))
+
+
+def test_denial_overrides_curated_labels():
+    curated = (label(E, A1, SourceClass.CURATED, "https://list-one.example/x"), label(E, A1, SourceClass.CURATED, "https://list-two.example/y"))
+    assert g(*curated).grade is Grade.B
+    assert g(*curated, _deny()) is None  # the entity said it is not theirs: no attribution left
+
+
+def test_denial_removes_only_the_denying_entity():
+    a = g(label(E, A1, SourceClass.CURATED, "https://list-one.example/x", entity="ex1"),
+          label(E, A1, SourceClass.CURATED, "https://list-two.example/y", entity="ex2"), _deny("ex1"))
+    assert (a.grade, a.rule, a.entity_id) == (Grade.C, "G-C1", "ex2")  # was a G-X1 conflict before the denial
+    assert any("G-N1" in n for n in a.trust_notes)
+
+
+def test_later_confirmation_supersedes_denial():
+    from datetime import date
+
+    a = g(_deny(as_of=date(2026, 1, 10)), _confirm(as_of=date(2026, 2, 1)))
+    assert (a.grade, a.rule) == (Grade.A, "G-A1") and any("superseded" in n for n in a.trust_notes)
+    assert g(_confirm(as_of=date(2026, 1, 10)), _deny(as_of=date(2026, 2, 1))) is None  # later denial wins
+
+
+def test_same_date_confirmation_and_denial_is_grade_x():
+    a = g(_confirm(), _deny())
+    assert (a.grade, a.rule) == (Grade.X, "G-N1") and a.conflicts == ("ex1",)
+
+
+def test_denial_from_a_weak_source_is_not_counted():
+    curated = label(E, A1, SourceClass.CURATED, "https://list-one.example/x")
+    a = g(curated, _deny(klass=SourceClass.WEAK, source="https://forum.example/post"))
+    assert (a.grade, a.entity_id) == (Grade.C, "ex1") and any("not counted" in n for n in a.trust_notes)
+
+
+def test_denial_survives_store_round_trip(tmp_path):
+    from anveshak.labels.importers import attestation_label
+    from anveshak.labels.store import write_jsonl
+    from datetime import date
+
+    d = attestation_label(E, A1, "ex1", "EX1", Category.EXCHANGE, "Sahyog reply R-9", date(2026, 3, 1), denies=True, reply_id="R-9")
+    assert d.denies and d.category is None and d.dataset_ref == "sahyog-reply:R-9"
+    write_jsonl(tmp_path / "a.jsonl", [d])
+    back = LabelStore.load([tmp_path / "a.jsonl"])
+    assert back.get(E, A1)[0] == d and back.snapshot_hash() == LabelStore([d]).snapshot_hash()

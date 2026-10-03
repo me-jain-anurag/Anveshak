@@ -64,7 +64,7 @@ not use are listed at the end, with the reason.
 ## 5. Software
 
 FastAPI, Pydantic v2, httpx, Jinja2, PyYAML, pycryptodome (Keccak-256 for EIP-55),
-Uvicorn, SQLite (WAL), pytest, and [Cytoscape.js](https://js.cytoscape.org) (dashboard graph, loaded from cdnjs).
+Uvicorn, SQLite (WAL), pytest, [Cytoscape.js](https://js.cytoscape.org) 3.30.2 (dashboard graph, MIT; vendored under `anveshak/static/vendor` with its sha256), and [pypdf](https://pypi.org/project/pypdf/) (used once, outside the package, to extract text from benchmark source PDFs).
 
 ## 6. Considered and deliberately not used
 
@@ -76,4 +76,27 @@ Uvicorn, SQLite (WAL), pytest, and [Cytoscape.js](https://js.cytoscape.org) (das
 | Taint shares (haircut / FIFO / poison) | The result depends on an arbitrary convention. We report a bottleneck upper bound (ADR-0006) |
 | Amount/time matching across chains | Produces candidates, not links (ADR-0014) |
 | Scraped explorer labels without a source per record | No dereferenceable primary source. Imported only through datasets that cite one, and graded "weak" otherwise |
+| [Allbridge](https://allbridge.io) resolver | Its API host did not resolve on 2026-10-03; nothing could be verified live |
+| Public Ethereum endpoint `ethereum-rpc.publicnode.com` for historical logs | Refused archive `eth_getLogs` without a token (2026-10-04) |
+| Fuzzy matching of Sahyog intermediary names | A request to the wrong intermediary is worse than none; exact match only (ADR-0019) |
 | Commercial intelligence (Chainalysis Reactor, TRM, Elliptic, Arkham) as a dependency | Closed and costly. They can plug in as providers through `intel.py` without changing grading |
+
+## 7. Added 2026-10-04: Sahyog-as-client, keyless EVM, bridges, benchmark, access control
+
+| Source | What we took from it | Used in |
+|---|---|---|
+| [Etherscan supported chains / API plans](https://docs.etherscan.io/supported-chains) | Free tier covers Ethereum, Polygon and Arbitrum only (checked 2026-09-30) | `chain.ETHERSCAN_FREE_TIER`, `case.evm_backend`, ADR-0021 |
+| [Ethereum JSON-RPC `eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs), [ERC-20 `Transfer` event](https://eips.ethereum.org/EIPS/eip-20) | Topic-filtered log scans by token contract and sender/receiver | `chains/rpc.py` |
+| Public RPC endpoints: `bsc-rpc.publicnode.com`, `base-rpc.publicnode.com`, `optimism-rpc.publicnode.com`, `avalanche-c-chain-rpc.publicnode.com`, `polygon-bor-rpc.publicnode.com`, `arb1.arbitrum.io/rpc`, `rpc.mevblocker.io` | Range limits, pruning behaviour ("pruned history unavailable"), archive-log availability, observed live 2026-10-03/04 | `config.DEFAULT_EVM_RPC`, `DEFAULT_RPC_MAX_SPAN`, ADR-0021, benchmark configuration |
+| [Microsoft Defender: behaviour monitoring](https://learn.microsoft.com/en-us/defender-endpoint/behavior-monitor) | Detection `Behavior:Win32/SuspEtherRpcConn.B` can end the process when ransomware labels and EVM RPC calls are combined; heuristic false positive | ADR-0021 note, architecture limitations |
+| [Wormholescan](https://wormholescan.io) API at `https://api.wormholescan.io/api/v1/operations?txHash=` | Operation record: source tx, `standarizedProperties.toChain/toAddress`, target tx; empty list for unknown tx (live 2026-10-03/04) | `crosschain/wormhole.py`, `tests/fixtures/crosschain/wormholescan_*` |
+| [wormhole-foundation/wormhole `sdk/vaa/structs.go`](https://github.com/wormhole-foundation/wormhole/blob/main/sdk/vaa/structs.go) | Wormhole `ChainID` constants (mapped chains and names of untraced ones, checked 2026-10-04) | `WORMHOLE_CHAINS` |
+| [LayerZero Scan API](https://scan.layerzero-api.com/v1/swagger) (`/v1/messages/tx/{hash}`, `/v1/messages/latest`) | Message record: pathway, source/destination tx, status; HTTP 404 for unknown tx; chain names observed in the live feed (2026-10-03/04) | `crosschain/layerzero.py`, `LZ_CHAINS` |
+| [Across API](https://docs.across.to/api-reference) (`/api/deposit?depositTxnRef=`, `/api/deposit/status`, `/api/swap/chains`) | Deposit record incl. `recipient`, `fillTx`, `pagination.maxIndex`; 404 for unknown; chain ids incl. Solana 34268394551451 and Tron 728126428 (live 2026-10-04) | `crosschain/across.py` |
+| [THORNode `inbound_addresses`](https://gateway.liquify.com/chain/thorchain_api/thorchain/inbound_addresses) · [THORChain dev docs: querying THORChain](https://dev.thorchain.org/concepts/querying-thorchain.html) | Current inbound vault and router per chain; vaults rotate on churn | `labels/importers.import_thorchain` |
+| U.S. v. 225,364,961 USDT, verified complaint (D.D.C. 2025), [justice.gov/usao-dc/media/1403996/dl](https://www.justice.gov/usao-dc/media/1403996/dl) | OKX deposit addresses and withdrawal destinations, ¶178–¶186 | benchmark BM-01 … BM-09 |
+| U.S. v. approx. 868,247 USDT, Case 1:25-cv-02967 (D.D.C.), [justice.gov/usao-dc/media/1412676/dl](https://www.justice.gov/usao-dc/media/1412676/dl) | Victim funding from Kraken, Crypto.com and Strike; laundering via SwapSpace (¶43–¶52) | benchmark BM-10 … BM-13 |
+| U.S. v. all USDT held in ten addresses, 26 Civ. 8010 (S.D.N.Y. 2026), [justice.gov/usao-sdny/media/1461216/dl](https://www.justice.gov/usao-sdny/media/1461216/dl) | "Entity A" Tron cluster; transfers to Nobitex (fn. 8, ¶46; cluster-level, upon information and belief) | benchmark BM-14, BM-15 |
+| Entity homepages wazirx.com, zebpay.com, coinswitch.co, mudrex.com (checked 2026-10-04) | Official domains (brand/legal-entity in page); CoinSwitch and Mudrex self-declare FIU-IND registration. coindcx.com blocked automated checks (403). fiuindia.gov.in had an expired TLS certificate, so the primary list could not be checked | `data/vasp_directory.yaml` |
+| [Digital Personal Data Protection Act, 2023](https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf) | Purpose limitation, accountability; exemption where data is processed for prevention, detection, investigation or prosecution of offences (s.17(1)(c), read in the Act's text 2026-10-04) | ADR-0023 DPDP notes |
+| [nginx `ssl_verify_client`](https://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_verify_client), [OAuth 2.0 client credentials (RFC 6749 §4.4)](https://www.rfc-editor.org/rfc/rfc6749#section-4.4) | Mutual TLS / OAuth for the Sahyog link at the proxy | docs/sahyog-integration.md, ADR-0023 |

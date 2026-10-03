@@ -1,0 +1,28 @@
+id: BM-10
+title: Victim funds from Kraken and Crypto.com accounts to a scam BTC address
+chain: bitcoin
+subject: bc1px0jrexmzlefw8slm3mxldz9sxchxxr58d02nc5udeu645e27awaq7ang6k
+direction: in
+max_hops: 2
+max_expansions: 40
+expected:
+  entities:
+  - kraken
+  - cryptocom
+  relation: the subject was funded by withdrawals from victim accounts at the expected VASPs
+sources:
+- publisher: U.S. Attorney's Office, District of Columbia
+  document: Verified complaint for forfeiture in rem against approximately 868,247 USDT, Case 1:25-cv-02967 (D.D.C., filed 2025-09-02)
+  url: https://www.justice.gov/usao-dc/media/1412676/dl
+  sha256: e4636890c356bbf8fe9b89572c420b225cbeb92c54fc8548b3816eee56d8c0e0
+  retrieved: '2026-10-04'
+  locator: ¶43, PDF page 14
+  quote: the Illinois Victim made five BTC transactions from their Kraken account to Bull Tycoon BTC address bc1px0jrexmzlefw8slm3mxldz9sxchxxr58d02nc5udeu645e27awaq7ang6k
+- publisher: U.S. Attorney's Office, District of Columbia
+  document: Verified complaint for forfeiture in rem against approximately 868,247 USDT, Case 1:25-cv-02967 (D.D.C., filed 2025-09-02)
+  url: https://www.justice.gov/usao-dc/media/1412676/dl
+  sha256: e4636890c356bbf8fe9b89572c420b225cbeb92c54fc8548b3816eee56d8c0e0
+  retrieved: '2026-10-04'
+  locator: ¶43, PDF page 14
+  quote: The FBI also obtained records from Crypto.com for an account controlled by the Illinois Victim, and identified an additional transaction
+    of approximately $10,103.60 to ang6k.

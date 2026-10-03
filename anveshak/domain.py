@@ -142,6 +142,10 @@ class AddressHistory(Frozen):
     transfers: tuple[Transfer, ...]
     complete: bool  # False when a record/page cap was hit — coverage is then partial
     note: str | None = None
+    # Set by window-limited sources (RPC log scans): only transfers inside this window were
+    # examined. Complete *within* the window; anything outside it is a declared coverage gap.
+    window_start: datetime | None = None
+    window_end: datetime | None = None
 
 
 # --------------------------------------------------------------------------- claims
@@ -216,10 +220,18 @@ class Label(Frozen):
     as_of: date | None = None
     dataset_ref: str  # where this record came from (file + sha256), for chain of custody
     synthetic: bool = False  # demo data — must never appear in a live case
+    # A denial: the entity states the address is NOT theirs (e.g. a VASP's reply to a Sahyog
+    # request). Removes that entity as a candidate owner — rule G-N1 (ADR-0020).
+    denies: bool = False
 
     @model_validator(mode="after")
     def _has_content(self) -> Label:
-        if self.category is None and not self.risk_flags:
+        if self.denies:
+            if not self.entity_id:
+                raise ValueError("a denial must name the entity that denies ownership")
+            if self.risk_flags:
+                raise ValueError("a denial cannot carry risk flags")
+        elif self.category is None and not self.risk_flags:
             raise ValueError("a label must carry a category or at least one risk flag")
         if not self.primary_source.strip():
             raise ValueError("a label must cite a primary source")

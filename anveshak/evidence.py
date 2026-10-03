@@ -51,6 +51,7 @@ def request_key(method: str, url: str, params: dict[str, Any] | None, body: Any)
 class Fetched:
     data: Any
     evidence_id: str
+    status: int = 200  # only differs from 200 when the caller accepted that status (e.g. 404 = "not found")
 
 
 class EvidenceStore:
@@ -83,7 +84,7 @@ class EvidenceStore:
             self._requests.mkdir(parents=True, exist_ok=True)
             key = request["request_key"]
             (self._requests / f"{key}.json").write_text(
-                json.dumps({"evidence_id": evidence_id, "request": request}, indent=2, sort_keys=True)
+                json.dumps({"evidence_id": evidence_id, "request": request, "status_code": status_code}, indent=2, sort_keys=True)
             )
         return evidence_id
 
@@ -101,16 +102,20 @@ class EvidenceStore:
         return json.loads(path.read_text()) if path.exists() else None
 
     def lookup(self, key: str) -> str | None:
+        record = self.lookup_record(key)
+        return record["evidence_id"] if record else None
+
+    def lookup_record(self, key: str) -> dict[str, Any] | None:
         path = self._requests / f"{key}.json"
         if not path.exists():
             return None
-        return json.loads(path.read_text())["evidence_id"]
+        return json.loads(path.read_text())
 
 
 class Fetcher(Protocol):
     used: list[str]
 
-    def get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None) -> Fetched: ...
+    def get(self, url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None, accept: tuple[int, ...] = ()) -> Fetched: ...
 
     def post(self, url: str, body: Any, headers: dict[str, str] | None = None) -> Fetched: ...
 
@@ -126,10 +131,12 @@ class _Tracking:
             self.used.append(evidence_id)
 
 
-def _parse_json(raw: bytes, url: str) -> Any:
+def _parse_json(raw: bytes, url: str, status: int = 200) -> Any:
     try:
         return json.loads(raw)
     except ValueError as exc:
+        if status != 200:
+            return None  # an accepted error status (e.g. 404) with a non-JSON body
         raise SourceError(f"{urlsplit(url).netloc} returned a non-JSON response") from exc
 
 
@@ -162,7 +169,7 @@ class LiveFetcher(_Tracking):
                 time.sleep(wait)
             self._last_call[host] = time.monotonic()
 
-    def _request(self, method: str, url: str, params: dict | None, body: Any, headers: dict | None) -> Fetched:
+    def _request(self, method: str, url: str, params: dict | None, body: Any, headers: dict | None, accept: tuple[int, ...] = ()) -> Fetched:
         host = urlsplit(url).netloc
         last_error: str = ""
         response: httpx.Response | None = None
@@ -181,10 +188,10 @@ class LiveFetcher(_Tracking):
                 time.sleep(min(2**attempt, 16))
         if response is None or response.status_code in (429, 500, 502, 503, 504):
             raise SourceError(f"{host} unavailable after {self.retries + 1} attempts ({last_error})")
-        if response.status_code >= 400:
+        if response.status_code >= 400 and response.status_code not in accept:
             raise SourceError(f"{host} returned HTTP {response.status_code}")
         raw = response.content
-        data = _parse_json(raw, url)
+        data = _parse_json(raw, url, response.status_code)
         request = {
             "request_key": request_key(method, url, params, body),
             "method": method,
@@ -195,10 +202,10 @@ class LiveFetcher(_Tracking):
         }
         evidence_id = self.store.put(raw, request, response.status_code)
         self._track(evidence_id)
-        return Fetched(data, evidence_id)
+        return Fetched(data, evidence_id, response.status_code)
 
-    def get(self, url, params=None, headers=None) -> Fetched:
-        return self._request("GET", url, params, None, headers)
+    def get(self, url, params=None, headers=None, accept=()) -> Fetched:
+        return self._request("GET", url, params, None, headers, accept)
 
     def post(self, url, body, headers=None) -> Fetched:
         return self._request("POST", url, None, body, headers)
@@ -211,17 +218,21 @@ class ReplayFetcher(_Tracking):
         super().__init__()
         self.store = store
 
-    def _replay(self, method: str, url: str, params: dict | None, body: Any) -> Fetched:
+    def _replay(self, method: str, url: str, params: dict | None, body: Any, accept: tuple[int, ...] = ()) -> Fetched:
         key = request_key(method, url, params, body)
-        evidence_id = self.store.lookup(key)
-        if evidence_id is None:
+        record = self.store.lookup_record(key)
+        if record is None:
             raise EvidenceMissing(f"no recorded response for {method} {url} {redact_params(params)}")
+        evidence_id = record["evidence_id"]
+        status = int(record.get("status_code", 200))
+        if status >= 400 and status not in accept:
+            raise SourceError(f"{urlsplit(url).netloc} returned HTTP {status} (recorded)")
         raw = self.store.read(evidence_id)
         self._track(evidence_id)
-        return Fetched(_parse_json(raw, url), evidence_id)
+        return Fetched(_parse_json(raw, url, status), evidence_id, status)
 
-    def get(self, url, params=None, headers=None) -> Fetched:
-        return self._replay("GET", url, params, None)
+    def get(self, url, params=None, headers=None, accept=()) -> Fetched:
+        return self._replay("GET", url, params, None, accept)
 
     def post(self, url, body, headers=None) -> Fetched:
         return self._replay("POST", url, None, body)

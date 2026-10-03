@@ -38,3 +38,12 @@ a single laptop, and the design must not block growth.
 
 - One laptop runs the full system, and the same code scales out by adding worker processes.
 - The single-host SQLite queue is the known ceiling. The migration path is documented above.
+- CI (`.github/workflows/ci.yml`, added 2026-10-04) builds the image on every push and checks that the container reports healthy.
+
+## Update 2026-10-04: deferred items
+
+- **Push monitoring.** The PS lists real-time intelligence as an expected outcome. The watchlist polls (default every 10 minutes) and queues a follow-up trace on movement.
+  * True push monitoring subscribes to new blocks or logs over websockets for every watched address. That needs self-hosted nodes per chain (step 3), because public endpoints rate-limit or drop long-lived subscriptions.
+  * It is deferred until step 3 exists. The `ChainSource` interface and the monitor's alert path stay the same.
+- **PostgreSQL.** Deferred. `storage.py` uses only portable SQL apart from `UPDATE … RETURNING` (supported by PostgreSQL) and the SQLite triggers that keep the outcome history and audit log append-only (PostgreSQL equivalent: a `BEFORE UPDATE OR DELETE` trigger raising an exception, or revoked privileges).
+- **Rate limits** are per API process (ADR-0023). With several API replicas, the reverse proxy enforces the global limit.

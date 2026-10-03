@@ -1,0 +1,39 @@
+name: benchmark
+
+# Live ground-truth benchmark (docs/benchmark.md). Manual only: it calls public APIs for a while.
+# Runs on Linux, where the Windows Defender heuristic described in ADR-0021 does not apply.
+on:
+  workflow_dispatch:
+    inputs:
+      ethereum_rpc:
+        description: JSON-RPC endpoint that serves historical eth_getLogs (for the Ethereum cases)
+        default: https://rpc.mevblocker.io
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Run all cases live (evidence recorded under var/)
+        env:
+          ANVESHAK_RPC_ETHEREUM: ${{ inputs.ethereum_rpc }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
+        run: anveshak benchmark
+      - name: Replay from the recorded evidence (no network needed for this step)
+        run: anveshak benchmark --replay --no-doc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            docs/benchmark.md
+            benchmarks/results/
+          retention-days: 30

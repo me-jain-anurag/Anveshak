@@ -1,0 +1,160 @@
+{
+ "operations": [
+  {
+   "id": "6/000000000000000000000000d78d199f8c402e7b5cc2abe278df0412400a3bae/1464",
+   "emitterChain": 6,
+   "emitterAddress": {
+    "hex": "000000000000000000000000d78d199f8c402e7b5cc2abe278df0412400a3bae",
+    "native": "0xd78d199f8c402e7b5cc2abe278df0412400a3bae"
+   },
+   "sequence": "1464",
+   "vaa": {
+    "raw": "<trimmed>",
+    "guardianSetIndex": 7,
+    "isDuplicated": false
+   },
+   "content": {
+    "standarizedProperties": {
+     "appIds": null,
+     "fromChain": 0,
+     "fromAddress": "",
+     "toChain": 0,
+     "toAddress": "",
+     "tokenChain": 0,
+     "tokenAddress": "",
+     "amount": "",
+     "feeAddress": "",
+     "feeChain": 0,
+     "fee": "",
+     "normalizedDecimals": null
+    },
+    "executorRequest": null
+   },
+   "sourceChain": {
+    "chainId": 6,
+    "timestamp": "2026-10-03T17:30:36Z",
+    "transaction": {
+     "txHash": "0x787bda0b2d408d3b0e87b4067f54e0d45f5811fcf0cddfdbbe3b1cab6089db44"
+    },
+    "from": "0x754dcfb2861547015b221e963b4133a71dbdc024",
+    "status": "confirmed",
+    "fee": "0.0017419600522588",
+    "gasTokenNotional": "11.16",
+    "feeUSD": "0.019440274183208208",
+    "isSolanaShim": false
+   }
+  },
+  {
+   "id": "2/000000000000000000000000d78d199f8c402e7b5cc2abe278df0412400a3bae/257964",
+   "emitterChain": 2,
+   "emitterAddress": {
+    "hex": "000000000000000000000000d78d199f8c402e7b5cc2abe278df0412400a3bae",
+    "native": "0xd78d199f8c402e7b5cc2abe278df0412400a3bae"
+   },
+   "sequence": "257964",
+   "content": {
+    "standarizedProperties": {
+     "appIds": null,
+     "fromChain": 0,
+     "fromAddress": "",
+     "toChain": 0,
+     "toAddress": "",
+     "tokenChain": 0,
+     "tokenAddress": "",
+     "amount": "",
+     "feeAddress": "",
+     "feeChain": 0,
+     "fee": "",
+     "normalizedDecimals": null
+    },
+    "executorRequest": null
+   },
+   "sourceChain": {
+    "chainId": 2,
+    "timestamp": "2026-10-03T17:30:35Z",
+    "transaction": {
+     "txHash": "0xb03833678dc1e1750c714127e21bb9b09d6823378ae75ba4cb94840ce82f3317"
+    },
+    "from": "0x754dcfb2861547015b221e963b4133a71dbdc024",
+    "status": "confirmed",
+    "fee": "0.000179861303719001",
+    "gasTokenNotional": "2684.03",
+    "feeUSD": "0.48275313502091025403",
+    "balanceChanges": [
+     {
+      "amount": "-11952671380083682",
+      "recipient": "0x754dcfb2861547015b221e963b4133a71dbdc024",
+      "tokenAddress": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+     }
+    ],
+    "isSolanaShim": false
+   }
+  },
+  {
+   "id": "1/19671a08a9cef6f3a04314ed478fc332a4966f41ad3e6fea76933dede9c6cdfe/786126",
+   "emitterChain": 1,
+   "emitterAddress": {
+    "hex": "19671a08a9cef6f3a04314ed478fc332a4966f41ad3e6fea76933dede9c6cdfe",
+    "native": "2iANpDh96GgithLPTVMZjZFtnbrYBUCLqnEvaytbwTQq"
+   },
+   "sequence": "786126",
+   "vaa": {
+    "raw": "<trimmed>",
+    "guardianSetIndex": 7,
+    "isDuplicated": false
+   },
+   "content": {
+    "payload": {
+     "amount": "13000000000000",
+     "fee": "0",
+     "message": "",
+     "messageType": "InitTransfer",
+     "nativeFee": "83486",
+     "payloadType": 0,
+     "recipient": "near:rawcat8888.near",
+     "sender": "sol:6bKoLDvB5zbSdtticwgg4oncTm4s3e9DwhJtxZJyhhcv",
+     "tokenAddress": "sol:8SMMso8Muv8d6i4WmMDthKt6TN1ysN6937sx3DKLXZqB",
+     "transferId": {
+      "originChain": "sol",
+      "originNonce": "786126"
+     }
+    },
+    "standarizedProperties": {
+     "appIds": [
+      "OMNI_BRIDGE"
+     ],
+     "fromChain": 1,
+     "fromAddress": "6bKoLDvB5zbSdtticwgg4oncTm4s3e9DwhJtxZJyhhcv",
+     "toChain": 15,
+     "toAddress": "rawcat8888.near",
+     "tokenChain": 1,
+     "tokenAddress": "8SMMso8Muv8d6i4WmMDthKt6TN1ysN6937sx3DKLXZqB",
+     "amount": "1300000000000",
+     "feeAddress": "8SMMso8Muv8d6i4WmMDthKt6TN1ysN6937sx3DKLXZqB",
+     "feeChain": 1,
+     "fee": "",
+     "normalizedDecimals": 8
+    },
+    "executorRequest": null
+   },
+   "sourceChain": {
+    "chainId": 1,
+    "timestamp": "2026-10-03T17:30:25Z",
+    "transaction": {
+     "txHash": "uC75XRv8EVrbQawwd1dbhuMx8fPVwFMssp6ErmNB3n7YCehQYQXKBYYeKqbsdEg8ixwxY2rDxqYesF7U6DrLpKA"
+    },
+    "from": "6bKoLDvB5zbSdtticwgg4oncTm4s3e9DwhJtxZJyhhcv",
+    "status": "confirmed",
+    "fee": "0.000045",
+    "gasTokenNotional": "119.78",
+    "feeUSD": "0.0053901",
+    "isSolanaShim": true
+   },
+   "data": {
+    "symbol": "rhea",
+    "tokenAmount": "13000",
+    "usdAmount": "1060.735"
+   }
+  }
+ ]
+}
