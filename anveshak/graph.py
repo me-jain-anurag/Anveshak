@@ -57,7 +57,7 @@ def build_graph(traces: list[TraceResult], links: list | None = None) -> dict:
             if r and n["data"]["chain"] == trace.chain:
                 n["data"]["risk"] = ", ".join(r.flags)
     for link in links or []:
-        if link.to_chain is None:
+        if link.to_chain is None or not link.to_address:
             continue
         target = node(link.to_chain.value, link.to_address)
         edges[link.id] = {

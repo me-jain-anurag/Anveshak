@@ -268,6 +268,87 @@ def import_ofac(out_dir: Path, tickers: list[str] | None = None, client: httpx.C
     return manifest
 
 
+THORNODE_INBOUND = "https://gateway.liquify.com/chain/thorchain_api/thorchain/inbound_addresses"
+THORCHAIN_DOCS = "https://dev.thorchain.org/concepts/querying-thorchain.html"
+
+# THORChain chain codes → chains this system traces (same table as the cross-chain resolver).
+THOR_LABEL_CHAINS = {"BTC": Chain.BITCOIN, "ETH": Chain.ETHEREUM, "BSC": Chain.BSC, "TRON": Chain.TRON, "BASE": Chain.BASE, "AVAX": Chain.AVALANCHE}
+
+
+def parse_thorchain_inbound(raw: bytes, url: str, fetched_on: date) -> tuple[list[Label], Counter]:
+    """Inbound vault and router addresses as published by THORChain's own node API.
+
+    Vaults rotate when THORChain churns its node set, so each label is dated (`as_of` = the
+    day of the fetch) and the import should be re-run regularly; an older vault stays a past
+    THORChain vault, which is what matters for a historical transfer. Class: CURATED — the
+    protocol is not a VASP in the directory, and these labels only say "this is the bridge",
+    which routes a case to the cross-chain resolvers rather than to a disclosure request."""
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise ValueError("unexpected inbound_addresses format: expected a JSON array")
+    digest = sha256_hex(raw)
+    labels, skipped = [], Counter()
+    for entry in data:
+        code = str(entry.get("chain", ""))
+        chain = THOR_LABEL_CHAINS.get(code)
+        if chain is None:
+            skipped[f"chain {code or '?'} not traced"] += 1
+            continue
+        for field_name, text in (("address", "THORChain inbound vault"), ("router", "THORChain router contract")):
+            raw_address = entry.get(field_name)
+            if not raw_address:
+                continue
+            try:
+                address = normalize(chain, str(raw_address))
+            except AddressError:
+                skipped["invalid address"] += 1
+                continue
+            labels.append(
+                Label(
+                    chain=chain,
+                    address=address,
+                    entity_id="thorchain",
+                    entity_name="THORChain",
+                    category=Category.BRIDGE,
+                    text=f"{text} ({code}; vaults rotate on churn)",
+                    source_id="thorchain-inbound",
+                    source_class=SourceClass.CURATED,
+                    primary_source=url,
+                    as_of=fetched_on,
+                    dataset_ref=f"thornode/inbound_addresses@sha256:{digest}",
+                )
+            )
+    return labels, skipped
+
+
+def import_thorchain(out_dir: Path, client: httpx.Client | None = None, url: str = THORNODE_INBOUND) -> dict:
+    client = client or httpx.Client(timeout=60)
+    response = client.get(url)
+    response.raise_for_status()
+    raw = response.content
+    labels, skipped = parse_thorchain_inbound(raw, url, datetime.now(timezone.utc).date())
+    out = Path(out_dir)
+    # keep earlier vaults: a transfer from last month went to last month's vault
+    previous = out / "thorchain_inbound.jsonl"
+    kept: dict[tuple[str, str], Label] = {}
+    if previous.exists():
+        for line in previous.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                old = Label.model_validate_json(line)
+                kept[(old.chain.value, old.address)] = old
+    for label in labels:
+        kept[(label.chain.value, label.address)] = label  # newest observation wins
+    write_jsonl(previous, sorted(kept.values(), key=lambda l: (l.chain.value, l.address)))
+    manifest = {
+        "source_id": "thorchain-inbound",
+        "imported_at": datetime.now(timezone.utc).isoformat(),
+        "files": [{"url": url, "sha256": sha256_hex(raw), "kept": len(labels), "total_with_history": len(kept), "skipped": dict(skipped)}],
+    }
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "MANIFEST.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8", newline="\n")
+    return manifest
+
+
 def attestation_label(
     chain: Chain,
     address: str,
@@ -277,9 +358,12 @@ def attestation_label(
     document_ref: str,
     as_of: date,
     source_class: SourceClass = SourceClass.ENTITY_ATTESTED,
+    denies: bool = False,
+    reply_id: str | None = None,
 ) -> Label:
     """A label recorded from a formal document — typically a VASP's reply to a Sahyog
-    request confirming that `address` is one of its (deposit) addresses."""
+    request confirming (or, with `denies=True`, denying) that `address` is one of its
+    addresses. Only the document reference is stored, never personal data from the reply."""
     if source_class not in (SourceClass.ENTITY_ATTESTED, SourceClass.AUTHORITY):
         raise ValueError("investigator attestations must be entity_attested or authority")
     if not document_ref.strip():
@@ -289,11 +373,12 @@ def attestation_label(
         address=normalize(chain, address),
         entity_id=entity_id.lower(),
         entity_name=entity_name,
-        category=category,
-        text=f"confirmed by {entity_name}",
+        category=None if denies else category,
+        text=f"{'denied' if denies else 'confirmed'} by {entity_name}",
         source_id="investigator",
         source_class=source_class,
         primary_source=document_ref,
         as_of=as_of,
-        dataset_ref=f"investigator:{document_ref}",
+        dataset_ref=f"sahyog-reply:{reply_id}" if reply_id else f"investigator:{document_ref}",
+        denies=denies,
     )

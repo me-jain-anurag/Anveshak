@@ -20,6 +20,7 @@ from ..chain import EVM_CHAIN_IDS, Chain, ChainFamily
 from ..domain import AddressHistory, Asset, Transfer, TransferKind, utc_from_timestamp
 from ..errors import ConfigError, SourceError
 from ..evidence import Fetcher
+from .evm_common import receipt_transfers
 from .base import (
     TRANSFER_TOPIC,
     Balance,
@@ -248,6 +249,13 @@ class EtherscanSource(ChainSource):
             return Verification(transfer_id=transfer.id, status=VerificationStatus.ERROR, method=method, detail=str(exc))
 
     # ------------------------------------------------------------------ extras
+
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        receipt, evidence_id = self._call({"module": "proxy", "action": "eth_getTransactionReceipt", "txhash": tx_hash})
+        if not isinstance(receipt, dict):
+            return []
+        block_ts, _ = self._block_timestamp(int(receipt["blockNumber"], 16))
+        return receipt_transfers(self.chain, self.registry, receipt, block_ts, evidence_id)
 
     def has_activity(self, address: str) -> bool:
         """Cheap probe (two one-record calls): has this address ever sent/received coin or tokens here?"""

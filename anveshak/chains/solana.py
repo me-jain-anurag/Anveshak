@@ -212,6 +212,12 @@ class SolanaRpcSource(ChainSource):
 
     # ------------------------------------------------------------------ extras
 
+    def tx_transfers(self, tx_hash: str) -> list[Transfer] | None:
+        tx, evidence_id = self._get_tx(tx_hash)
+        if tx is None:
+            return []
+        return assign_occurrence_positions(self.parse(tx, evidence_id)[0])
+
     def is_contract(self, address: str) -> bool | None:
         """Program-derived (off-curve) addresses are program-controlled: pools, vaults, escrows."""
         try:

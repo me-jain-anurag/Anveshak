@@ -38,8 +38,15 @@ def _to_native_txid(chain: Chain | None, txid: str) -> str:
     return t.removeprefix("0x")
 
 
+def _l1_chain(asset: str) -> Chain | None:
+    """`BTC.BTC` / `ETH.USDT-0X...` are layer-1 assets; `ETH~ETH` (trade) and `ETH/ETH` (synth) live on THORChain."""
+    code, sep, _ = asset.partition(".")
+    return THOR_CHAINS.get(code) if sep and "~" not in code and "/" not in code else None
+
+
 class ThorchainResolver:
     name = "thorchain"
+    chains = frozenset(THOR_CHAINS.values())
 
     def __init__(self, fetcher: Fetcher, base_url: str = DEFAULT_MIDGARD):
         self.fetcher = fetcher
@@ -56,8 +63,8 @@ class ThorchainResolver:
             if action.get("type") != "swap":
                 continue
             inbound = [i for i in action.get("in") or [] if str(i.get("txID", "")).upper() == txid]
-            if not inbound:
-                continue
+            if not inbound or not any(_l1_chain(c.get("asset", "")) is chain for c in inbound[0].get("coins") or []):
+                continue  # the inbound leg must be a native (L1) deposit on the chain being traced
             asset_in = ",".join(c.get("asset", "") for c in inbound[0].get("coins") or [])
             memo = ((action.get("metadata") or {}).get("swap") or {}).get("memo", "")
             for out in action.get("out") or []:
@@ -91,6 +98,7 @@ class ThorchainResolver:
                         memo=str(memo),
                         status=str(action.get("status", "")),
                         evidence_id=fetched.evidence_id,
+                        recipient_basis="Midgard swap action: out[].address (the memo destination THORChain paid)",
                     )
                 )
         return links

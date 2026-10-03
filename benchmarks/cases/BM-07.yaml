@@ -1,0 +1,24 @@
+id: BM-07
+title: OKX account flow, ¶184
+chain: ethereum
+subject: '0xe8b4b6bee0f6b913b847a7b850cc02bbde30d506'
+direction: in
+since: '2023-05-20T00:00:00Z'
+until: '2023-05-23T00:00:00Z'
+window_hours: 96
+max_hops: 3
+max_expansions: 40
+expected:
+  entities:
+  - okx
+  relation: the subject received withdrawals from an account at the expected VASP
+sources:
+- publisher: U.S. Attorney's Office, District of Columbia
+  document: Verified complaint for forfeiture in rem against 225,364,961 USDT (D.D.C., 2025)
+  url: https://www.justice.gov/usao-dc/media/1403996/dl
+  sha256: 2134aba63aa003b2574401bb7ba94c10fa54970e82131baa747cdba0ebc8ae0b
+  retrieved: '2026-10-04'
+  locator: ¶184, PDF page 56
+  quote: On the same day, the OKX account conducted an equal number of withdrawals within minutes of the deposits, all to address 0xe8b4b6bee0f6b913b847a7b850cc02bbde30d506
+notes: The document does not name the blockchain. USDT transfers on Ethereum (contract 0xdac17f…1ec7) into the stated deposit address on the stated
+  dates were confirmed with eth_getLogs before the case was added.

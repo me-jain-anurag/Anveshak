@@ -4,7 +4,9 @@
 |---|---|
 | [requirements-traceability.md](requirements-traceability.md) | every PS 26182 clause → implementation → test → status |
 | [architecture.md](architecture.md) | pipeline, modules, security, running, known limitations |
-| [sahyog-integration.md](sahyog-integration.md) | API contract for the Sahyog portal: ingestion, results, callbacks, approval, attestations |
+| [sahyog-integration.md](sahyog-integration.md) | API contract for the Sahyog portal (Sahyog is the client): reports, recommendations, outcomes, replies, screening, keys and scope |
+| [benchmark.md](benchmark.md) | ground-truth benchmark from public court filings: cases, scoring, results, limits |
+| [demo-script.md](demo-script.md) | offline demo pack and the step-by-step presentation script |
 | [references.md](references.md) | every paper, dataset, API, standard and source used, where it is used, and what was rejected |
 | [adr/](adr/) | architecture decision records |
 
@@ -30,3 +32,9 @@
 | [0016](adr/0016-intel-providers-and-graph-exports.md) | Intelligence APIs as label providers; Neo4j / GraphML exports |
 | [0017](adr/0017-chain-coverage-and-data-sources.md) | Chain coverage and data sources |
 | [0018](adr/0018-synthetic-demo-isolation.md) | Synthetic demo isolated and watermarked |
+| [0019](adr/0019-sahyog-is-the-client.md) | Sahyog is the client: recommendations out, outcomes and replies back in |
+| [0020](adr/0020-formal-denials.md) | A VASP's formal denial overrides other labels (G-N1) |
+| [0021](adr/0021-keyless-evm-rpc-log-scan.md) | EVM chains without a paid indexer: window-limited JSON-RPC log scan |
+| [0022](adr/0022-bridge-resolvers.md) | Wormhole, LayerZero and Across resolvers; THORChain vault labels |
+| [0023](adr/0023-api-clients-scoping-audit.md) | Per-client keys, roles, agency scoping, limits, append-only audit log |
+| [0024](adr/0024-cospend-with-busy-wallet-stops-trace.md) | Co-spend with a high-activity address stops the trace (R-COSPEND-SERVICE; from benchmark BM-10) |

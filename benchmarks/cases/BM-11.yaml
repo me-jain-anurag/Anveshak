@@ -1,0 +1,22 @@
+id: BM-11
+title: Scam consolidation address sends BTC to SwapSpace
+chain: bitcoin
+subject: 19sr6fy83JhYoTUmmTigXkh6AKp1oMMBz6
+direction: out
+since: '2024-10-29T00:00:00Z'
+max_hops: 3
+max_expansions: 40
+expected:
+  entities:
+  - swapspace
+  relation: the subject sent BTC to the expected swap service
+sources:
+- publisher: U.S. Attorney's Office, District of Columbia
+  document: Verified complaint for forfeiture in rem against approximately 868,247 USDT, Case 1:25-cv-02967 (D.D.C., filed 2025-09-02)
+  url: https://www.justice.gov/usao-dc/media/1412676/dl
+  sha256: e4636890c356bbf8fe9b89572c420b225cbeb92c54fc8548b3816eee56d8c0e0
+  retrieved: '2026-10-04'
+  locator: ¶45, PDF page 16
+  quote: The entirety of the BTC sent from MMBz6 to SwapSpace was swapped from BTC to USDT on the Tron Network.
+notes: MMBz6 is defined in ¶44 as 19sr6fy83JhYoTUmmTigXkh6AKp1oMMBz6. SwapSpace is a swap service; it is not in the directory or label sets, so
+  a miss measures label coverage.

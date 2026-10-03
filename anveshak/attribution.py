@@ -9,6 +9,10 @@ in every report next to the grade, so a reader can look the rule up in docs.
   G-B1  Two or more curated labels with different primary sources agree ........ grade B
   G-C1  Exactly one curated primary source ..................................... grade C
   G-C2  Only weak sources (web crawl, heuristic, unknown) ...................... grade C
+  G-N1  An entity formally denies the address is theirs (entity-attested, e.g. a VASP's
+        reply to a Sahyog request): every label naming that entity is disregarded. A later
+        confirmation from the same entity supersedes the denial; a confirmation and a denial
+        with the same date are a conflict (grade X).
 
 Derivations — facts on the ledger linking an unlabelled address to a labelled one.
 Each lowers the grade one step (A→B, B→C). They never start from C or X, and never chain
@@ -25,6 +29,7 @@ Each lowers the grade one step (A→B, B→C). They never start from C or X, and
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 from .chain import Chain, ChainFamily
 from .domain import (
@@ -60,6 +65,41 @@ def _source_phrase(label: Label, klass: SourceClass) -> str:
     return f"{label.source_id} ({klass}) citing {label.primary_source}"
 
 
+def _effective_class(label: Label, entity: str | None, trust: SourceTrust | None) -> SourceClass:
+    return trust.effective(label, entity)[0] if trust else label.source_class
+
+
+def _apply_denials(
+    ownership: list[Label], denials: list[Label], aliases: dict[str, str], trust: SourceTrust | None
+) -> tuple[list[Label], list[str], list[str]]:
+    """Rule G-N1. Returns (labels still standing, notes, entities that both confirm and deny)."""
+    canon = lambda e: aliases.get(e, e)  # noqa: E731
+    notes: list[str] = []
+    counted: list[Label] = []
+    for d in denials:
+        if _effective_class(d, canon(d.entity_id), trust) is SourceClass.ENTITY_ATTESTED:
+            counted.append(d)
+        else:
+            notes.append(f"denial attributed to {d.entity_id} not counted: it is not from that entity's official channel or a formal reply")
+    removed: set[str] = set()
+    self_conflicts: list[str] = []
+    for entity in sorted({canon(d.entity_id) for d in counted}):
+        mine = [d for d in counted if canon(d.entity_id) == entity]
+        latest = max(mine, key=lambda d: d.as_of or date.min)
+        confirmations = [l for l in ownership if l.entity_id and canon(l.entity_id) == entity and _effective_class(l, entity, trust) is SourceClass.ENTITY_ATTESTED]
+        last_confirmed = max((l.as_of or date.min for l in confirmations), default=None)
+        denied_on = latest.as_of or date.min
+        if last_confirmed is not None and last_confirmed > denied_on:
+            notes.append(f"{entity} denied ownership ({latest.primary_source}) but confirmed it later — denial superseded (G-N1)")
+        elif last_confirmed is not None and last_confirmed == denied_on:
+            self_conflicts.append(entity)
+        else:
+            removed.add(entity)
+            notes.append(f"{entity} formally denied ownership ({latest.primary_source}, {latest.as_of or 'undated'}) — labels naming {entity} disregarded (G-N1)")
+    kept = [l for l in ownership if not (l.entity_id and canon(l.entity_id) in removed)]
+    return kept, notes, self_conflicts
+
+
 def grade_labels(
     chain: Chain,
     address: str,
@@ -67,15 +107,33 @@ def grade_labels(
     aliases: dict[str, str] | None = None,
     trust: SourceTrust | None = None,
 ) -> Attribution | None:
-    """Apply rules G-X1 .. G-C2.
+    """Apply rules G-N1, G-X1 .. G-C2.
 
     `aliases` maps dataset-specific entity ids to canonical ones (from the VASP directory) so
     that e.g. "crypto.com" and "cryptocom" are not a conflict. `trust` re-checks each label's
     claimed source class against who actually published it (see sourcetrust.py)."""
-    ownership = [l for l in labels if l.category is not None]
+    aliases = aliases or {}
+    claimed = [l for l in labels if l.category is not None and not l.denies]
+    denials = [l for l in labels if l.denies]
+    ownership, denial_notes, self_conflicts = _apply_denials(claimed, denials, aliases, trust)
+    if self_conflicts:
+        return Attribution(
+            chain=chain,
+            address=address,
+            entity_id=None,
+            entity_name=None,
+            category=_pick_category(claimed),
+            grade=Grade.X,
+            rule="G-N1",
+            explanation=f"Grade X (G-N1): {', '.join(self_conflicts)} both confirmed and denied ownership in documents of the same date. "
+            "Not routed automatically; an analyst must obtain a clarification.",
+            labels=tuple(claimed + denials),
+            effective_classes=tuple(l.source_class for l in claimed + denials),
+            trust_notes=tuple(denial_notes),
+            conflicts=tuple(self_conflicts),
+        )
     if not ownership:
         return None
-    aliases = aliases or {}
     entities = sorted({aliases.get(l.entity_id, l.entity_id) for l in ownership if l.entity_id})
     category = _pick_category(ownership)
 
@@ -92,6 +150,7 @@ def grade_labels(
             "Not routed automatically; an analyst must resolve the conflict.",
             labels=tuple(ownership),
             effective_classes=tuple(l.source_class for l in ownership),
+            trust_notes=tuple(denial_notes),
             conflicts=tuple(entities),
         )
 
@@ -138,7 +197,7 @@ def grade_labels(
         explanation=f"Grade {grade} ({rule}): {why}",
         labels=tuple(ownership),
         effective_classes=tuple(classes),
-        trust_notes=tuple(notes),
+        trust_notes=tuple(notes + denial_notes),
     )
 
 

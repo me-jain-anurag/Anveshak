@@ -1,4 +1,5 @@
-"""SQLite persistence: the case queue, approvals, alerts, watchlist, cross-case sightings, callbacks.
+"""SQLite persistence: the case queue, approvals, alerts, watchlist, cross-case sightings, callbacks,
+recommendation outcomes (append-only) and the audit log (append-only, hash-chained).
 
 SQLite in WAL mode lets the API process and any number of `anveshak worker` processes on
 the same host share one queue. Claiming a job is a single atomic UPDATE ... RETURNING, so
@@ -8,6 +9,7 @@ directly onto PostgreSQL (see docs/adr/0015-scaling.md).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -29,6 +31,8 @@ CREATE TABLE IF NOT EXISTS cases (
     callback_url     TEXT,
     claimed_by       TEXT,
     claimed_at       TEXT,
+    agency_id        TEXT,                    -- the agency whose case this is (scopes visibility)
+    parent_case_id   TEXT,                    -- set when the case is a re-run of another
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL
 );
@@ -66,6 +70,7 @@ CREATE TABLE IF NOT EXISTS watchlist (
     last_checked_at TEXT,
     baseline_json   TEXT,                    -- transfer ids already known at the last check
     active          INTEGER NOT NULL DEFAULT 1,
+    agency_id       TEXT,
     UNIQUE (chain, address, case_id)
 );
 CREATE TABLE IF NOT EXISTS sightings (
@@ -83,7 +88,47 @@ CREATE TABLE IF NOT EXISTS callbacks (
     status      TEXT NOT NULL,
     detail      TEXT
 );
+CREATE TABLE IF NOT EXISTS recommendation_status (
+    seq               INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id           TEXT NOT NULL,
+    recommendation_id TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    sahyog_request_id TEXT,
+    note              TEXT,
+    reported_by       TEXT,
+    client_id         TEXT NOT NULL,
+    recorded_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS recommendation_status_case ON recommendation_status(case_id, seq);
+CREATE TRIGGER IF NOT EXISTS recommendation_status_no_update BEFORE UPDATE ON recommendation_status
+BEGIN SELECT RAISE(ABORT, 'recommendation_status is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS recommendation_status_no_delete BEFORE DELETE ON recommendation_status
+BEGIN SELECT RAISE(ABORT, 'recommendation_status is append-only'); END;
+CREATE TABLE IF NOT EXISTS audit_log (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          TEXT NOT NULL,
+    client_id   TEXT NOT NULL,
+    agency_id   TEXT,
+    ip          TEXT,
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    case_id     TEXT,
+    prev_hash   TEXT NOT NULL,
+    entry_hash  TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 """
+
+AUDIT_FIELDS = ("seq", "at", "client_id", "agency_id", "ip", "method", "path", "status_code", "case_id")
+
+
+def audit_hash(prev_hash: str, entry: dict) -> str:
+    body = json.dumps({k: entry[k] for k in AUDIT_FIELDS}, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256((prev_hash + body).encode()).hexdigest()
 
 
 def now() -> str:
@@ -104,7 +149,8 @@ class CaseStore:
 
     # Columns added after the first release; older databases get them via ALTER TABLE.
     _ADDED_COLUMNS = {
-        "cases": [("sahyog_reference", "TEXT"), ("callback_url", "TEXT"), ("claimed_by", "TEXT"), ("claimed_at", "TEXT")],
+        "cases": [("sahyog_reference", "TEXT"), ("callback_url", "TEXT"), ("claimed_by", "TEXT"), ("claimed_at", "TEXT"), ("agency_id", "TEXT"), ("parent_case_id", "TEXT")],
+        "watchlist": [("agency_id", "TEXT")],
     }
 
     def _migrate(self) -> None:
@@ -128,11 +174,14 @@ class CaseStore:
 
     # ------------------------------------------------------------------ cases / queue
 
-    def create(self, case_id: str, case_reference: str, data_mode: str, request: dict, sahyog_reference: str | None = None, callback_url: str | None = None) -> None:
+    def create(
+        self, case_id: str, case_reference: str, data_mode: str, request: dict, sahyog_reference: str | None = None, callback_url: str | None = None,
+        agency_id: str | None = None, parent_case_id: str | None = None,
+    ) -> None:
         t = now()
         self._exec(
-            "INSERT INTO cases (case_id, case_reference, data_mode, status, request_json, sahyog_reference, callback_url, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (case_id, case_reference, data_mode, "queued", json.dumps(request), sahyog_reference, callback_url, t, t),
+            "INSERT INTO cases (case_id, case_reference, data_mode, status, request_json, sahyog_reference, callback_url, agency_id, parent_case_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (case_id, case_reference, data_mode, "queued", json.dumps(request), sahyog_reference, callback_url, agency_id, parent_case_id, t, t),
         )
 
     def claim_next(self, worker_id: str) -> dict | None:
@@ -161,17 +210,29 @@ class CaseStore:
         rows = self._all("SELECT * FROM cases WHERE case_id = ?", (case_id,))
         return rows[0] if rows else None
 
-    def list(self, limit: int = 50) -> list[dict]:
+    @staticmethod
+    def _scope(agency: str | None | object, column: str = "agency_id") -> tuple[str, tuple]:
+        """`ALL` = no restriction; otherwise only rows of that agency (None = rows without agency)."""
+        if agency is ALL:
+            return "1=1", ()
+        if agency is None:
+            return f"{column} IS NULL", ()
+        return f"{column} = ?", (agency,)
+
+    def list(self, limit: int = 50, agency: str | None | object = None) -> list[dict]:
+        where, params = self._scope(agency if agency is not None else ALL)
         return self._all(
-            "SELECT case_id, case_reference, data_mode, status, findings_hash, error, sahyog_reference, created_at, updated_at FROM cases ORDER BY created_at DESC LIMIT ?",
-            (limit,),
+            f"SELECT case_id, case_reference, data_mode, status, findings_hash, error, sahyog_reference, agency_id, parent_case_id, created_at, updated_at FROM cases WHERE {where} ORDER BY created_at DESC LIMIT ?",
+            (*params, limit),
         )
 
-    def done_results(self, limit: int = 1000) -> list[dict]:
-        return self._all("SELECT case_id, case_reference, data_mode, result_json FROM cases WHERE status='done' ORDER BY created_at DESC LIMIT ?", (limit,))
+    def done_results(self, limit: int = 1000, agency: str | None | object = None) -> list[dict]:
+        where, params = self._scope(agency if agency is not None else ALL)
+        return self._all(f"SELECT case_id, case_reference, data_mode, result_json FROM cases WHERE status='done' AND {where} ORDER BY created_at DESC LIMIT ?", (*params, limit))
 
-    def status_counts(self) -> dict[str, int]:
-        return {r["status"]: r["n"] for r in self._all("SELECT status, COUNT(*) AS n FROM cases GROUP BY status")}
+    def status_counts(self, agency: str | None | object = None) -> dict[str, int]:
+        where, params = self._scope(agency if agency is not None else ALL)
+        return {r["status"]: r["n"] for r in self._all(f"SELECT status, COUNT(*) AS n FROM cases WHERE {where} GROUP BY status", params)}
 
     # ------------------------------------------------------------------ approvals
 
@@ -193,28 +254,47 @@ class CaseStore:
         )
         return int(cur.lastrowid)
 
-    def alerts(self, limit: int = 100, case_id: str | None = None, unacknowledged: bool = False) -> list[dict]:
+    def alerts(self, limit: int = 100, case_id: str | None = None, unacknowledged: bool = False, agency: str | None | object = None) -> list[dict]:
         clauses, params = [], []
         if case_id:
-            clauses.append("case_id = ?")
+            clauses.append("a.case_id = ?")
             params.append(case_id)
         if unacknowledged:
-            clauses.append("acknowledged = 0")
+            clauses.append("a.acknowledged = 0")
+        if agency is not None and agency is not ALL:
+            clauses.append("c.agency_id = ?")
+            params.append(agency)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        return self._all(f"SELECT * FROM alerts {where} ORDER BY alert_id DESC LIMIT ?", (*params, limit))
+        return self._all(f"SELECT a.* FROM alerts a LEFT JOIN cases c ON c.case_id = a.case_id {where} ORDER BY a.alert_id DESC LIMIT ?", (*params, limit))
+
+    def alert(self, alert_id: int) -> dict | None:
+        rows = self._all("SELECT a.*, c.agency_id AS case_agency_id FROM alerts a LEFT JOIN cases c ON c.case_id = a.case_id WHERE a.alert_id = ?", (alert_id,))
+        return rows[0] if rows else None
 
     def acknowledge(self, alert_id: int) -> bool:
         return self._exec("UPDATE alerts SET acknowledged = 1 WHERE alert_id = ?", (alert_id,)).rowcount == 1
 
     # ------------------------------------------------------------------ watchlist
 
-    def watch(self, chain: str, address: str, case_id: str | None, reason: str) -> int | None:
-        cur = self._exec("INSERT OR IGNORE INTO watchlist (chain, address, case_id, reason, added_at) VALUES (?,?,?,?,?)", (chain, address, case_id, reason, now()))
+    def watch(self, chain: str, address: str, case_id: str | None, reason: str, agency_id: str | None = None) -> int | None:
+        cur = self._exec(
+            "INSERT OR IGNORE INTO watchlist (chain, address, case_id, reason, added_at, agency_id) VALUES (?,?,?,?,?,?)",
+            (chain, address, case_id, reason, now(), agency_id),
+        )
         return int(cur.lastrowid) if cur.rowcount else None
 
-    def watches(self, active_only: bool = True) -> list[dict]:
-        where = "WHERE active = 1" if active_only else ""
-        return self._all(f"SELECT * FROM watchlist {where} ORDER BY watch_id")
+    def watches(self, active_only: bool = True, agency: str | None | object = None) -> list[dict]:
+        clauses = ["active = 1"] if active_only else []
+        params: tuple = ()
+        if agency is not None and agency is not ALL:
+            clauses.append("agency_id = ?")
+            params = (agency,)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return self._all(f"SELECT * FROM watchlist {where} ORDER BY watch_id", params)
+
+    def get_watch(self, watch_id: int) -> dict | None:
+        rows = self._all("SELECT * FROM watchlist WHERE watch_id = ?", (watch_id,))
+        return rows[0] if rows else None
 
     def update_watch(self, watch_id: int, baseline: list[str]) -> None:
         self._exec("UPDATE watchlist SET baseline_json = ?, last_checked_at = ? WHERE watch_id = ?", (json.dumps(baseline), now(), watch_id))
@@ -230,7 +310,8 @@ class CaseStore:
 
     def other_cases_for(self, case_id: str) -> list[dict]:
         return self._all(
-            """SELECT s2.chain, s2.address, s2.case_id AS other_case_id, s2.role AS other_role, s1.role AS role, c.case_reference AS other_reference
+            """SELECT s2.chain, s2.address, s2.case_id AS other_case_id, s2.role AS other_role, s1.role AS role, c.case_reference AS other_reference,
+                      c.agency_id AS other_agency_id
                FROM sightings s1 JOIN sightings s2 ON s1.chain = s2.chain AND s1.address = s2.address AND s2.case_id != s1.case_id
                JOIN cases c ON c.case_id = s2.case_id
                WHERE s1.case_id = ? ORDER BY s2.chain, s2.address""",
@@ -245,5 +326,56 @@ class CaseStore:
     def callbacks(self, case_id: str) -> list[dict]:
         return self._all("SELECT * FROM callbacks WHERE case_id = ? ORDER BY attempted_at", (case_id,))
 
+    # ------------------------------------------------------------------ recommendation outcomes (append-only)
+
+    def add_status(self, case_id: str, recommendation_id: str, status: str, sahyog_request_id: str | None, note: str | None, reported_by: str | None, client_id: str) -> int:
+        cur = self._exec(
+            "INSERT INTO recommendation_status (case_id, recommendation_id, status, sahyog_request_id, note, reported_by, client_id, recorded_at) VALUES (?,?,?,?,?,?,?,?)",
+            (case_id, recommendation_id, status, sahyog_request_id, note, reported_by, client_id, now()),
+        )
+        return int(cur.lastrowid)
+
+    def statuses(self, case_id: str | None = None) -> list[dict]:
+        if case_id is None:
+            return self._all("SELECT * FROM recommendation_status ORDER BY seq")
+        return self._all("SELECT * FROM recommendation_status WHERE case_id = ? ORDER BY seq", (case_id,))
+
+    # ------------------------------------------------------------------ audit log (append-only, hash-chained)
+
+    def audit(self, client_id: str, agency_id: str | None, ip: str | None, method: str, path: str, status_code: int, case_id: str | None) -> None:
+        with self._lock, self._db:
+            last = self._db.execute("SELECT entry_hash FROM audit_log ORDER BY seq DESC LIMIT 1").fetchone()
+            prev = last[0] if last else "0" * 64
+            seq = (self._db.execute("SELECT COALESCE(MAX(seq), 0) FROM audit_log").fetchone()[0] or 0) + 1
+            entry = {"seq": seq, "at": now(), "client_id": client_id, "agency_id": agency_id, "ip": ip, "method": method, "path": path, "status_code": status_code, "case_id": case_id}
+            self._db.execute(
+                "INSERT INTO audit_log (seq, at, client_id, agency_id, ip, method, path, status_code, case_id, prev_hash, entry_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (*(entry[k] for k in AUDIT_FIELDS), prev, audit_hash(prev, entry)),
+            )
+
+    def audit_entries(self, limit: int = 200, client_id: str | None = None, case_id: str | None = None) -> list[dict]:
+        clauses, params = [], []
+        if client_id:
+            clauses.append("client_id = ?")
+            params.append(client_id)
+        if case_id:
+            clauses.append("case_id = ?")
+            params.append(case_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return self._all(f"SELECT * FROM audit_log {where} ORDER BY seq DESC LIMIT ?", (*params, limit))
+
+    def verify_audit(self) -> dict:
+        prev = "0" * 64
+        count = 0
+        for row in self._all("SELECT * FROM audit_log ORDER BY seq"):
+            if row["prev_hash"] != prev or audit_hash(prev, row) != row["entry_hash"]:
+                return {"intact": False, "entries": count, "first_bad_seq": row["seq"]}
+            prev = row["entry_hash"]
+            count += 1
+        return {"intact": True, "entries": count, "head": prev}
+
     def raw(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
         return self._all(sql, params)
+
+
+ALL = object()  # scope marker: every agency

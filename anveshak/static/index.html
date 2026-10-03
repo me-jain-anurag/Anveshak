@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anveshak — VASP attribution</title>
 <link rel="stylesheet" href="/static/style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script src="/static/vendor/cytoscape.min.js"></script>
 </head>
 <body>
 <header class="top">
@@ -18,7 +18,7 @@
     <button data-tab="analytics">Analytics</button>
     <button data-tab="lookup">Lookup</button>
   </nav>
-  <div id="meta" class="muted small"></div>
+  <div class="right"><div id="meta" class="muted small"></div><button id="key-btn" class="secondary small" title="API key for this browser tab (kept in session storage only)">API key</button></div>
 </header>
 
 <section id="tab-cases" class="tab on">
@@ -62,7 +62,11 @@
     <p class="small muted">Paste wallets reported on the Sahyog portal, one per line. The chain is detected from the address format and checksum. For 0x addresses, the EVM chains with activity are probed. Invalid inputs are rejected with a reason, never guessed.</p>
     <form id="intake-form">
       <label>Sahyog reference <input name="sahyog_reference" required placeholder="SAHYOG/2026/000123"></label>
-      <label>Agency <input name="agency" placeholder="Cyber Crime PS"></label>
+      <div class="row">
+        <label>Agency <input name="agency" placeholder="Cyber Crime PS"></label>
+        <label>Agency id <input name="agency_id" placeholder="DL-IFSO"></label>
+      </div>
+      <label>Incident time (needed for EVM chains traced by RPC log scan) <input name="since" type="datetime-local"></label>
       <label>Wallets <textarea name="wallets" rows="6" required spellcheck="false"></textarea></label>
       <button type="submit">Submit report</button>
     </form>
@@ -94,6 +98,15 @@
       <button type="submit">Look up</button>
     </form>
     <div id="lookup-out" class="small"></div>
+  </div>
+  <div class="card narrow">
+    <h2>Screen several addresses</h2>
+    <p class="small muted">Labels, risk flags and earlier cases only — immediate, no chain data fetched. One address per line; the chain is detected.</p>
+    <form id="screen-form">
+      <textarea name="addresses" rows="5" required spellcheck="false"></textarea>
+      <button type="submit">Screen</button>
+    </form>
+    <div id="screen-out" class="small"></div>
   </div>
 </section>
 <script src="/static/app.js"></script>

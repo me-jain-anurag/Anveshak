@@ -1,6 +1,6 @@
 # ADR-0014: Cross-chain links only from deterministic identifier matching
 
-- Status: accepted
+- Status: accepted (extended by ADR-0022)
 - Date: 2026-09-30
 
 ## Context
@@ -26,11 +26,12 @@ approaches: deterministic identifier matching, field-constraint heuristics, and 
   produces say how value got there (`RoutingDecision.via`).
 - Verified live on 2026-09-30: a real BTC → TRON.USDT swap resolved, and its 2,209.939306 USDT outbound confirmed via TronGrid.
 
-## Future resolvers (same interface)
+## More resolvers (same interface)
 
-Wormholescan (`/api/v1/operations?txHash=`), LayerZero Scan (`/v1/messages/tx/{hash}`), and
-bridge event-log mining in the style of ABCTRACER. Each response format must be verified live
-before shipping, as was done for Midgard.
+Implemented in ADR-0022 (2026-10-04): Wormhole (Wormholescan), LayerZero (LayerZero Scan; recipient
+resolved from the destination transaction) and Across (Across API), plus dated THORChain vault labels.
+Bridges without a public lookup API remain future work (event-log mining in the style of ABCTRACER).
+Every format is verified live before shipping, as was done for Midgard.
 
 ## Consequences
 

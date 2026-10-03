@@ -1,0 +1,84 @@
+{
+ "operations": [
+  {
+   "id": "1/ec7372995d5cc8732397fb0ad35c0121e0eaa90d26f828a534cab54391b3a4f5/1428113",
+   "emitterChain": 1,
+   "emitterAddress": {
+    "hex": "ec7372995d5cc8732397fb0ad35c0121e0eaa90d26f828a534cab54391b3a4f5",
+    "native": "Gv1KWf8DT1jKv5pKBmGaTmVszqa56Xn8YGx2Pg7i7qAk"
+   },
+   "sequence": "1428113",
+   "vaa": {
+    "raw": "<trimmed>",
+    "guardianSetIndex": 7,
+    "isDuplicated": false
+   },
+   "content": {
+    "payload": {
+     "amount": "5590312983",
+     "fee": "0",
+     "payloadType": 1,
+     "toAddress": "0x0000000000000000000000006c656b4b6042a0c477dcc969d6e0ea40d83d97ad",
+     "toChain": 4,
+     "tokenAddress": "0x052ed35010b819ff4914f47a3118c42c98bf210fd7e47d722307b5c24901a7ba",
+     "tokenChain": 1
+    },
+    "standarizedProperties": {
+     "appIds": [
+      "PORTAL_TOKEN_BRIDGE"
+     ],
+     "fromChain": 1,
+     "fromAddress": "",
+     "toChain": 4,
+     "toAddress": "0x6C656b4b6042A0c477DcC969D6E0Ea40d83D97aD",
+     "tokenChain": 1,
+     "tokenAddress": "METAewgxyPbgwsseH8T16a39CQ5VyVxZi9zXiDPY18m",
+     "amount": "",
+     "feeAddress": "METAewgxyPbgwsseH8T16a39CQ5VyVxZi9zXiDPY18m",
+     "feeChain": 1,
+     "fee": "",
+     "normalizedDecimals": null
+    },
+    "executorRequest": null
+   },
+   "sourceChain": {
+    "chainId": 1,
+    "timestamp": "2026-10-03T17:23:58Z",
+    "transaction": {
+     "txHash": "4aAnwxNUZ4TaHSehrDuxUFqD1ZiMFuAUjZD2LK7zieJ5rdiA1UayWuvg87v1dSW57kmjB1GMGhyLPZfNawVRhLYV"
+    },
+    "from": "5i1xVD5x84iA7TpT64iHGUrmNLF8qaT4AwqVLATLU9kp",
+    "status": "confirmed",
+    "fee": "0.00001",
+    "gasTokenNotional": "119.88",
+    "feeUSD": "0.0011988",
+    "isSolanaShim": false
+   },
+   "targetChain": {
+    "chainId": 4,
+    "timestamp": "2026-10-03T17:24:15Z",
+    "transaction": {
+     "txHash": "0xb97f1a9463b4215606b606b46079fc15df50e3bc69315790fcef061385bbca74"
+    },
+    "status": "completed",
+    "from": "0x6c656b4b6042a0c477dcc969d6e0ea40d83d97ad",
+    "to": "0xb6f6d86a8f9879a9c87f643768d9efc38c1da6e7",
+    "fee": "0.0000262725",
+    "gasTokenNotional": "790.54",
+    "feeUSD": "0.02076946215",
+    "balanceChanges": [
+     {
+      "amount": "5590312983",
+      "recipient": "0x6c656b4b6042a0c477dcc969d6e0ea40d83d97ad",
+      "tokenAddress": "0x75a5863a19af60ec0098d62ed8c34cc594fb470f"
+     }
+    ]
+   },
+   "data": {
+    "symbol": "Metaplex",
+    "tokenAmount": "5590.312983",
+    "usdAmount": "348.76844638"
+   }
+  }
+ ]
+}

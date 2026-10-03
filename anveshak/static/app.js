@@ -10,13 +10,43 @@ let selected = null;
 let pollTimer = null;
 let cy = null;
 let CHAINS = [];
+let META = null;
+const OUTCOMES = ["submitted", "acknowledged", "responded", "complied", "partially_complied", "declined", "funds_frozen", "not_pursued", "closed"];
+
+// The API key lives in sessionStorage only (this tab), never in the page or the URL.
+function apiKey() { try { return sessionStorage.getItem("anveshak-key") || ""; } catch (e) { return ""; } }
+function setApiKey(k) { try { k ? sessionStorage.setItem("anveshak-key", k) : sessionStorage.removeItem("anveshak-key"); } catch (e) { /* storage blocked */ } }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey()) headers["X-API-Key"] = apiKey();
+  const res = await fetch(path, { ...opts, headers });
   const body = res.headers.get("content-type")?.includes("json") ? await res.json() : await res.text();
+  if (res.status === 401) $("#meta").textContent = "API key required — use the API key button";
   if (!res.ok) throw new Error(typeof body === "object" ? JSON.stringify(body.detail ?? body) : body);
   return body;
 }
+
+// Report/export links cannot carry a header, so they are fetched and opened as blobs.
+async function openAuthed(path, download) {
+  const headers = apiKey() ? { "X-API-Key": apiKey() } : {};
+  const res = await fetch(path, { headers });
+  if (!res.ok) { alert(`${res.status}: ${await res.text()}`); return; }
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener" });
+  if (download) a.download = download;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+const can = (p) => !!META && (META.client.permissions.includes("*") || META.client.permissions.includes(p));
+
+$("#key-btn").addEventListener("click", () => {
+  const k = prompt("API key for this tab (leave empty to clear)", "");
+  if (k === null) return;
+  setApiKey(k.trim());
+  loadMeta(); loadCases(); refreshAlertCount();
+});
 
 // ------------------------------------------------------------------ tabs & meta
 
@@ -31,11 +61,12 @@ document.querySelectorAll("#tabs button").forEach((b) =>
 async function loadMeta() {
   try {
     const m = await api("/v1/meta");
+    META = m;
     CHAINS = m.chains;
     for (const sel of ["#chain-select", "#watch-chain", "#lookup-chain"]) {
       $(sel).innerHTML = m.chains.map((c) => `<option value="${esc(c.chain)}">${esc(c.name)}${c.configured ? "" : " (not configured)"}</option>`).join("");
     }
-    $("#meta").textContent = `${m.labels.count.toLocaleString()} labels · policy v${m.policy.version} · ${m.chains.filter((c) => c.configured).length}/${m.chains.length} chains ready · v${m.version}`;
+    $("#meta").textContent = `${m.client.client_id}${m.client.agency_id ? " (" + m.client.agency_id + ")" : ""} · ${m.labels.count.toLocaleString()} labels · policy v${m.policy.version} · ${m.chains.filter((c) => c.configured).length}/${m.chains.length} chains ready · v${m.version}`;
   } catch (e) {
     $("#meta").textContent = `meta unavailable: ${e.message}`;
   }
@@ -112,7 +143,9 @@ async function showCase(id) {
     view.innerHTML = `<div class="card"><h2>${esc(c.case_reference)}</h2><p class="error">Failed: ${esc(c.error)}</p></div>`;
     return;
   }
-  renderCase(c);
+  let recs = [];
+  try { recs = (await api(`/v1/cases/${id}/recommendations`)).recommendations; } catch (e) { /* older case */ }
+  renderCase(c, recs);
   refreshAlertCount();
 }
 
@@ -124,10 +157,48 @@ function fmtAmount(b) {
   return `${whole}${frac ? "." + frac : ""} ${a.symbol}`;
 }
 
-function renderCase(c) {
+function groupEndpoints(endpoints, scores) {
+  const groups = new Map();
+  for (const e of endpoints) {
+    const k = `${e.kind}|${e.address}`;
+    const g = groups.get(k) || { e, paths: 0, best: null };
+    g.paths += 1;
+    if (e.hops < g.e.hops) g.e = e;
+    const s = scores[e.id];
+    if (s && (!g.best || s.score > g.best.score)) g.best = s;
+    groups.set(k, g);
+  }
+  return [...groups.values()];
+}
+
+function renderRecommendations(c, recs, synthetic) {
+  const approved = new Set((c.approvals || []).map((a) => a.decision_id));
+  const standalone = META && META.standalone_approvals && can("approve");
+  let h = `<h3>Recommendations for Sahyog</h3><p class="small muted">The officer approves and sends in Sahyog; Sahyog reports the outcome back here.${standalone ? " Standalone approvals are enabled on this server." : ""}</p>`;
+  if (!recs.length) return h + `<p class="muted">No VASP or issuer reached on any traced path.</p>`;
+  h += `<div class="table-wrap"><table><tr><th>Intermediary</th><th>Request</th><th>Grade</th><th>Confidence</th><th>Readiness</th><th>Outcome</th><th>Reason</th><th></th></tr>`;
+  for (const r of recs) {
+    const i = r.intermediary;
+    const hist = r.status_history.map((x) => `${esc(x.recorded_at.slice(0, 16).replace("T", " "))} ${esc(x.status.replaceAll("_", " "))}${x.sahyog_request_id ? " · " + esc(x.sahyog_request_id) : ""} <span class="muted">(${esc(x.client_id)})</span>`).join("<br>");
+    const outcome = can("recommendation:status") && !synthetic
+      ? `<select data-outcome="${esc(r.recommendation_id)}"><option value="">record…</option>${OUTCOMES.map((o) => `<option>${o}</option>`).join("")}</select>` : "";
+    const canApprove = standalone && r.readiness === "ready_for_approval" && !synthetic && !approved.has(r.recommendation_id);
+    h += `<tr><td>${esc(i.display_name)}<div class="small muted">${i.on_sahyog ? "Sahyog id " + esc(i.sahyog_intermediary_id) : "not on Sahyog" + (r.alternative_channels.length ? " · " + r.alternative_channels.map((ch) => `<a href="${esc(ch.url)}" target="_blank" rel="noopener">${esc(ch.name)}</a>`).join(", ") : "")}</div>
+        <div class="small muted">${esc(r.subject.chain)} · ${dirText(r.subject.direction)}</div></td>
+      <td>${esc(r.request_type.replace("_", " "))}</td>
+      <td>${r.attribution.grade ? `<span class="grade grade-${esc(r.attribution.grade)}">${esc(r.attribution.grade)}</span>` : "—"}</td>
+      <td>${r.attribution.confidence !== null ? `<span class="score band-${esc(r.attribution.confidence_band)}">${r.attribution.confidence}</span>` : "—"}</td>
+      <td class="st-${esc(r.readiness)}">${esc(r.readiness.replaceAll("_", " "))}${approved.has(r.recommendation_id) ? "<div class='small'>approved (standalone)</div>" : ""}</td>
+      <td>${r.status ? esc(r.status.replaceAll("_", " ")) : "<span class='muted'>—</span>"}<div class="hist">${hist}</div>${outcome}</td>
+      <td class="small">${esc(r.reasons.join("; "))}<details><summary>draft</summary><pre class="small">${esc(r.draft_text)}</pre></details></td>
+      <td>${canApprove ? `<button class="small" data-approve="${esc(r.recommendation_id)}">Approve</button>` : ""}</td></tr>`;
+  }
+  return h + `</table></div>`;
+}
+
+function renderCase(c, recs) {
   const f = c.result.findings;
   const synthetic = f.data_mode === "synthetic";
-  const approved = new Set((c.approvals || []).map((a) => a.decision_id));
   const cont = Object.fromEntries(f.continuations.map((x) => [x.trace_index, f.crosschain_links.find((l) => l.id === x.link_id)]));
   let h = synthetic ? `<div class="banner">SYNTHETIC DEMO DATA — fictional entities and transactions, not evidence</div>` : "";
   h += `<div class="card"><h2>${esc(f.request.case_reference)}</h2><div class="kv">
@@ -136,10 +207,12 @@ function renderCase(c) {
       <span class="muted">Scoring policy</span><span class="mono">v${esc(f.policy_version)} · ${esc(f.policy_snapshot.slice(0, 16))}…</span>
       <span class="muted">Evidence objects</span><span>${f.evidence_ids.length}</span>
     </div>
-    <p><a href="/v1/cases/${esc(c.case_id)}/report" target="_blank" rel="noopener">Full report ↗</a> ·
-       <a href="/v1/cases/${esc(c.case_id)}/export/neo4j">Neo4j (Cypher)</a> ·
-       <a href="/v1/cases/${esc(c.case_id)}/export/graphml">GraphML</a> ·
-       <a href="/v1/cases/${esc(c.case_id)}/export/json">JSON</a></p></div>`;
+    <p><a href="#" data-open="/v1/cases/${esc(c.case_id)}/report">Full report ↗</a> ·
+       <a href="#" data-open="/v1/cases/${esc(c.case_id)}/export/neo4j" data-file="${esc(c.case_id)}.cypher">Neo4j (Cypher)</a> ·
+       <a href="#" data-open="/v1/cases/${esc(c.case_id)}/export/graphml" data-file="${esc(c.case_id)}.graphml">GraphML</a> ·
+       <a href="#" data-open="/v1/cases/${esc(c.case_id)}/export/json" data-file="${esc(c.case_id)}.json">JSON</a>
+       ${c.parent_case_id ? ` · re-run of <a href="#" data-case="${esc(c.parent_case_id)}">${esc(c.parent_case_id.slice(0, 8))}</a>` : ""}
+       ${can("case:create") && !synthetic ? ` · <button class="small secondary" id="rerun-btn" title="queue the same request again, e.g. after a VASP reply was recorded">Re-run</button>` : ""}</p></div>`;
 
   // nearest VASPs
   const nearest = f.analyses.flatMap((a, i) => a.nearest_vasps.map((n) => ({ ...n, trace: f.traces[i], i })));
@@ -175,29 +248,14 @@ function renderCase(c) {
     h += `</table></div>`;
   }
 
-  // routing
-  h += `<h3>Request drafts</h3>`;
-  if (!f.routing.length) h += `<p class="muted">No VASP or issuer reached on any traced path.</p>`;
-  else {
-    h += `<div class="table-wrap"><table><tr><th>Target</th><th>Request</th><th>Grade</th><th>Confidence</th><th>Status</th><th>Reason</th><th></th></tr>`;
-    for (const d of f.routing) {
-      const canApprove = d.status === "ready_for_approval" && !synthetic && !approved.has(d.id);
-      h += `<tr><td>${esc(d.target_name)}<div class="small muted">${esc(d.chain)} · ${dirText(d.direction)}</div></td>
-        <td>${esc(d.request_type.replace("_", " "))}</td>
-        <td>${d.grade ? `<span class="grade grade-${esc(d.grade)}">${esc(d.grade)}</span>` : "—"}</td>
-        <td>${d.confidence !== null ? `<span class="score band-${esc(d.confidence_band)}">${d.confidence}</span>` : "—"}</td>
-        <td class="st-${esc(d.status)}">${esc(d.status.replaceAll("_", " "))}${approved.has(d.id) ? "<div class='small'>approved</div>" : ""}</td>
-        <td class="small">${esc(d.reasons.join("; "))}<details><summary>draft</summary><pre class="small">${esc(d.draft_text)}</pre></details></td>
-        <td>${canApprove ? `<button class="small" data-approve="${esc(d.id)}">Approve</button>` : ""}</td></tr>`;
-    }
-    h += `</table></div>`;
-  }
+  // recommendations (routing decisions + Sahyog ids + outcome history)
+  h += renderRecommendations(c, recs, synthetic);
 
   if (f.crosschain_links.length) {
     h += `<h3>Cross-chain movements</h3><div class="table-wrap"><table><tr><th>Rule</th><th>From</th><th>To</th><th>Destination check</th></tr>`;
     for (const l of f.crosschain_links) {
       h += `<tr><td class="mono small">${esc(l.rule)}</td><td class="mono small">${esc(l.from_chain)} ${esc(short(l.from_tx))}</td>
-        <td class="mono small">${esc(l.to_chain || l.to_chain_code)} ${esc(short(l.to_address))}<div class="muted">${esc(l.asset_in)} → ${esc(l.asset_out)}</div></td>
+        <td class="mono small">${esc(l.to_chain || l.to_chain_code)} ${l.to_address ? esc(short(l.to_address)) : "<em>recipient unresolved</em>"}<div class="muted">${esc(l.asset_in)} → ${esc(l.asset_out)}</div>${l.recipient_basis ? `<div class="muted">recipient: ${esc(l.recipient_basis)}</div>` : ""}</td>
         <td class="small">${l.destination_confirmed === true ? "confirmed" : l.destination_confirmed === false ? "NOT FOUND" : "not confirmed"} <span class="muted">${esc(l.destination_detail || "")}</span></td></tr>`;
     }
     h += `</table></div>`;
@@ -214,9 +272,9 @@ function renderCase(c) {
     h += `<h3>${esc(t.chain)} · <span class="mono">${esc(short(t.subject))}</span> · ${dirText(t.params.direction)}${cont[i] ? ` · <span class="muted">cross-chain continuation via ${esc(cont[i].protocol)}</span>` : ""}</h3>`;
     if (!t.endpoints.length) { h += `<p class="muted">No endpoints (${esc(t.coverage.subject_note || "nothing to follow")}).</p>`; return; }
     h += `<div class="table-wrap"><table><tr><th>Endpoint</th><th>Address</th><th>Attribution</th><th>Confidence</th><th>Hops</th><th>Bottleneck</th></tr>`;
-    for (const e of t.endpoints) {
-      const a = e.attribution, s = scores[e.id];
-      h += `<tr><td>${esc(e.kind.replaceAll("_", " "))}${e.notes.map((n) => `<div class="small muted">${esc(n)}</div>`).join("")}</td>
+    for (const g of groupEndpoints(t.endpoints, scores)) {
+      const e = g.e, a = e.attribution, s = g.best;
+      h += `<tr><td>${esc(e.kind.replaceAll("_", " "))}${g.paths > 1 ? `<div class="small">${g.paths} paths end here</div>` : ""}${e.notes.map((n) => `<div class="small muted">${esc(n)}</div>`).join("")}</td>
         <td class="mono">${esc(e.address)}${e.adjacent_role ? `<div class="small muted">via ${esc(e.adjacent_address)} — ${esc(e.adjacent_role)}</div>` : ""}</td>
         <td>${a ? `<span class="grade grade-${esc(a.grade)}">${esc(a.grade)}</span> ${esc(a.entity_name || "conflict")} <span class="small muted">${esc(a.rule)}</span>` : "<span class='muted'>—</span>"}</td>
         <td>${s ? `<span class="score band-${esc(s.band)}" title="${esc(s.items.map((i) => `${i.component} ${i.points}: ${i.reason}`).join("\n"))}">${s.score}</span>` : "—"}</td>
@@ -231,7 +289,22 @@ function renderCase(c) {
   });
   $("#case-view").innerHTML = h;
   document.querySelectorAll("[data-approve]").forEach((b) => (b.onclick = () => approve(c.case_id, b.dataset.approve)));
+  document.querySelectorAll("#case-view [data-open]").forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); openAuthed(a.dataset.open, a.dataset.file); }));
+  document.querySelectorAll("#case-view [data-case]").forEach((a) => (a.onclick = (ev) => { ev.preventDefault(); showCase(a.dataset.case); }));
+  document.querySelectorAll("[data-outcome]").forEach((s) => (s.onchange = () => recordOutcome(c.case_id, s.dataset.outcome, s.value)));
+  const rr = $("#rerun-btn");
+  if (rr) rr.onclick = async () => { try { const r = await api(`/v1/cases/${c.case_id}/rerun`, { method: "POST" }); showCase(r.case_id); } catch (e) { alert(e.message); } };
   drawGraph(c.case_id);
+}
+
+async function recordOutcome(caseId, recId, status) {
+  if (!status) return;
+  const ref = prompt(`Record "${status.replaceAll("_", " ")}". Sahyog request id (optional):`, "");
+  if (ref === null) { showCase(caseId); return; }
+  try {
+    await api(`/v1/cases/${caseId}/recommendations/${recId}/status`, { method: "POST", body: JSON.stringify({ status, sahyog_request_id: ref.trim() || null }) });
+  } catch (e) { alert(e.message); }
+  showCase(caseId);
 }
 
 async function approve(caseId, decisionId) {
@@ -281,7 +354,9 @@ $("#intake-form").addEventListener("submit", async (ev) => {
   const wallets = f.get("wallets").split(/\s+/).map((w) => w.trim()).filter(Boolean);
   const out = $("#intake-out");
   try {
-    const r = await api("/v1/sahyog/reports", { method: "POST", body: JSON.stringify({ sahyog_reference: f.get("sahyog_reference"), agency: f.get("agency") || null, wallets }) });
+    const body = { sahyog_reference: f.get("sahyog_reference"), agency: f.get("agency") || null, agency_id: f.get("agency_id") || null, wallets };
+    if (f.get("since")) body.since = new Date(f.get("since")).toISOString();
+    const r = await api("/v1/sahyog/reports", { method: "POST", body: JSON.stringify(body) });
     out.innerHTML = renderIntake(r) + `<p><button class="small" id="open-case">Open case</button></p>`;
     $("#open-case").onclick = () => { document.querySelector('[data-tab="cases"]').click(); showCase(r.case_id); };
   } catch (e) {
@@ -336,6 +411,9 @@ async function loadAnalytics() {
   h += `<h3>VASPs reached</h3><div class="table-wrap"><table><tr><th>VASP</th><th>Cases</th><th></th><th>Ready drafts</th><th>Best confidence</th><th>Nearest hops</th></tr>${a.vasps_reached.map((v) => `
     <tr><td>${esc(v.vasp)}</td><td>${v.cases}</td><td style="width:30%"><div class="bar" style="width:${(100 * v.cases) / max}%"></div></td><td>${v.ready_drafts}</td><td>${v.best_confidence}</td><td>${v.min_hops ?? "—"}</td></tr>`).join("")}</table></div>`;
   const table = (title, obj) => `<h3>${esc(title)}</h3><div class="table-wrap"><table>${Object.entries(obj).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("") || "<tr><td class='muted'>none</td></tr>"}</table></div>`;
+  h += table("Recommendation outcomes reported by Sahyog", a.recommendation_outcomes || {});
+  const ob = a.outcomes_by_intermediary || {};
+  if (Object.keys(ob).length) h += `<div class="table-wrap"><table><tr><th>Intermediary</th><th>Outcomes</th></tr>${Object.entries(ob).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="small">${Object.entries(v).map(([s, n]) => `${esc(s.replaceAll("_", " "))}: ${n}`).join(" · ")}</td></tr>`).join("")}</table></div>`;
   h += table("Typologies detected", a.typologies) + table("Subject risk levels", a.subject_risk_levels) + table("Traces by chain", a.traces_by_chain) + table("Drafts by type and status", a.routing);
   $("#analytics").innerHTML = h;
 }
@@ -350,7 +428,21 @@ $("#lookup-form").addEventListener("submit", async (ev) => {
     out.innerHTML = (a ? `<p><span class="grade grade-${esc(a.grade)}">${esc(a.grade)}</span> ${esc(a.entity_name || "conflict")} — ${esc(a.explanation)}</p>${a.trust_notes.map((n) => `<p class="error">${esc(n)}</p>`).join("")}`
       : `<p class="muted">No ownership label for this address.</p>`)
       + (r.risk ? `<p>Risk flags: ${esc(r.risk.flags.join(", "))}</p>` : "")
-      + (r.seen_in_cases.length ? `<p>Seen in ${r.seen_in_cases.length} case(s): ${r.seen_in_cases.map((s) => `${esc(s.case_id.slice(0, 8))} (${esc(s.role)})`).join(", ")}</p>` : "");
+      + (r.seen_in_cases.length ? `<p>Seen in ${r.seen_in_cases.length} case(s): ${r.seen_in_cases.map((s) => `${esc(s.case_id.slice(0, 8))} (${esc(s.role)})`).join(", ")}</p>` : "")
+      + (r.seen_in_other_agency_cases ? `<p>Also seen in ${r.seen_in_other_agency_cases} case(s) of other agencies — contact the I4C coordinator.</p>` : "");
+  } catch (e) { out.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+});
+
+$("#screen-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const addresses = new FormData(ev.target).get("addresses").split(/\s+/).map((x) => x.trim()).filter(Boolean).slice(0, 100);
+  const out = $("#screen-out");
+  try {
+    const r = await api("/v1/screen", { method: "POST", body: JSON.stringify({ addresses }) });
+    out.innerHTML = `<div class="table-wrap"><table><tr><th>Address</th><th>Chain</th><th>Attribution</th><th>Risk</th><th>Cases</th></tr>${r.results.map((x) => x.valid
+      ? `<tr><td class="mono">${esc(short(x.address))}</td><td>${esc(x.chain)}</td><td>${x.attribution ? `<span class="grade grade-${esc(x.attribution.grade)}">${esc(x.attribution.grade)}</span> ${esc(x.attribution.entity_name || "conflict")}` : "<span class='muted'>—</span>"}</td>
+         <td>${esc(x.risk_flags.join(", ") || "—")}</td><td>${x.seen_in_cases.length}${x.seen_in_other_agency_cases ? ` (+${x.seen_in_other_agency_cases} other agency)` : ""}</td></tr>`
+      : `<tr><td class="mono">${esc(x.input)}</td><td colspan="4" class="error">${esc(x.reason)}</td></tr>`).join("")}</table></div><p class="muted">${esc(r.note)}</p>`;
   } catch (e) { out.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
 });
 

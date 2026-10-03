@@ -20,15 +20,16 @@ from . import __version__
 from .addresses import normalize
 from .assets import AssetRegistry
 from .attribution import Attributor
-from .chain import Chain, ChainFamily
+from .chain import ETHERSCAN_FREE_TIER, Chain, ChainFamily
 from .chains.base import CachingSource, ChainSource, Verification
 from .chains.bitcoin import EsploraSource
 from .chains.evm import EtherscanSource
+from .chains.rpc import RpcLogSource
 from .chains.solana import SolanaRpcSource
 from .chains.tron import TronGridSource
 from .analysis import TraceAnalysis, analyze
 from .config import DATA_DIR, Settings
-from .crosschain import CrossChainLink, ThorchainResolver
+from .crosschain import RESOLVERS, CrossChainLink, recipient_from_destination
 from .directory import VaspDirectory
 from .domain import Direction, EndpointKind, Frozen
 from .errors import ConfigError, SourceError
@@ -133,7 +134,37 @@ def findings_hash(findings: CaseFindings) -> str:
     return sha256_hex(canonical_json(findings.model_dump(mode="json")))
 
 
+def evm_backend(settings: Settings, chain: Chain) -> str:
+    """Which data source an EVM chain uses (ADR-0021): "etherscan" when the configured key's
+    plan covers the chain, else "rpc" (window-limited log scan) when an RPC URL is known."""
+    if settings.etherscan_api_key and (chain in ETHERSCAN_FREE_TIER or settings.etherscan_paid):
+        return "etherscan"
+    if settings.evm_rpc_urls.get(chain.value):
+        return "rpc"
+    return "etherscan"  # will fail with a clear ConfigError about the missing key
+
+
+def chains_needing_since(settings: Settings, chains) -> list[Chain]:
+    return [c for c in chains if c.family is ChainFamily.EVM and evm_backend(settings, c) == "rpc"]
+
+
 CROSSCHAIN_ENDPOINTS = frozenset({EndpointKind.SERVICE, EndpointKind.UNLABELED_CONTRACT, EndpointKind.HIGH_ACTIVITY})
+
+
+LIVE_MIN_INTERVAL = {
+    "api.etherscan.io": 0.25,
+    "blockstream.info": 0.25,
+    "api.mainnet-beta.solana.com": 0.35,
+    "gateway.liquify.com": 0.5,
+    "api.wormholescan.io": 0.5,
+    "scan.layerzero-api.com": 0.5,
+    "app.across.to": 0.5,
+}
+
+
+def live_fetcher(settings: Settings, store: EvidenceStore) -> LiveFetcher:
+    """The live fetcher with the per-host pacing used everywhere (CLI, API workers, benchmark)."""
+    return LiveFetcher(store, min_interval={**LIVE_MIN_INTERVAL, "api.trongrid.io": 0.2 if settings.trongrid_api_key else 0.6})
 
 
 class Engine:
@@ -159,6 +190,7 @@ class Engine:
         self.trust = trust or SourceTrust.load(DATA_DIR / "authorities.yaml", directory.official_sources())
         self.providers = providers or []
         self.settings = settings
+        self.window_start: datetime | None = None  # bounds RPC log scans (set from the request)
         self._sources: dict[Chain, ChainSource] = dict(sources or {})
         self.fetcher = fetcher
         if mode is DataMode.SYNTHETIC and not sources:
@@ -167,22 +199,14 @@ class Engine:
             if settings is None:
                 raise ValueError("live/replay mode needs settings or a fetcher")
             store = EvidenceStore(settings.evidence_dir)
-            self.fetcher = ReplayFetcher(store) if mode is DataMode.REPLAY else LiveFetcher(
-                store,
-                min_interval={
-                    "api.etherscan.io": 0.25,
-                    "api.trongrid.io": 0.2 if settings.trongrid_api_key else 0.6,
-                    "blockstream.info": 0.25,
-                    "api.mainnet-beta.solana.com": 0.35,
-                    "gateway.liquify.com": 0.5,
-                },
-            )
+            self.fetcher = ReplayFetcher(store) if mode is DataMode.REPLAY else live_fetcher(settings, store)
         if resolvers is not None:
             self.resolvers = resolvers
         elif mode is DataMode.SYNTHETIC:
             self.resolvers = []
         else:
-            self.resolvers = [ThorchainResolver(self.fetcher)]
+            names = settings.crosschain_resolvers if settings is not None else tuple(RESOLVERS)
+            self.resolvers = [RESOLVERS[n](self.fetcher) for n in names if n in RESOLVERS]
 
     def source(self, chain: Chain) -> ChainSource:
         if chain in self._sources:
@@ -194,8 +218,18 @@ class Engine:
             raise ConfigError(f"no synthetic data for {chain}")
         s = self.settings
         assert s is not None and self.fetcher is not None
-        if chain.family is ChainFamily.EVM:
-            src: ChainSource = EtherscanSource(
+        if chain.family is ChainFamily.EVM and evm_backend(s, chain) == "rpc":
+            if self.window_start is None:
+                raise ConfigError(
+                    f"{chain.display_name} is traced through a public RPC log scan (no Etherscan plan covers it): "
+                    "the incident time `since` is required to bound the scan window"
+                )
+            src: ChainSource = RpcLogSource(
+                chain, self.fetcher, self.registry, rpc_url=s.evm_rpc_urls[chain.value], window_start=self.window_start,
+                window_hours=s.logscan_window_hours, max_span=int(s.rpc_max_span.get(chain.value, 5000)),
+            )
+        elif chain.family is ChainFamily.EVM:
+            src = EtherscanSource(
                 chain, self.fetcher, self.registry, api_key=s.etherscan_api_key, base_url=s.etherscan_base_url,
                 require_key=self.mode is DataMode.LIVE,
             )
@@ -223,6 +257,8 @@ class Engine:
                 continue
             seen.add(last.tx_hash)
             for resolver in self.resolvers:
+                if result.chain not in getattr(resolver, "chains", frozenset(Chain)):
+                    continue
                 try:
                     links = resolver.resolve(result.chain, last.tx_hash, last.sender, e.id)
                 except SourceError as exc:
@@ -232,11 +268,39 @@ class Engine:
         return found
 
     def _confirm_destination(self, link: CrossChainLink) -> CrossChainLink:
-        """Check that the protocol's outbound transaction really pays `to_address` on `to_chain`."""
+        """Check that the protocol's outbound transaction really pays `to_address` on `to_chain`:
+        first at transaction level (`tx_transfers`), else in the destination address history.
+        A link whose record names no recipient (LayerZero) gets it from the destination
+        transaction, only if a single receiver remains after excluding protocol contracts."""
         if link.to_chain is None or not link.to_tx:
             return link
         try:
-            history = self.source(link.to_chain).history(link.to_address)
+            source = self.source(link.to_chain)
+            in_tx = source.tx_transfers(link.to_tx)
+            if not link.to_address:
+                if in_tx is None:
+                    return link.model_copy(update={"destination_detail": "recipient unresolved: the destination source cannot list a transaction's transfers"})
+                recipient, why = recipient_from_destination(link, in_tx)
+                if recipient is None:
+                    return link.model_copy(update={"destination_detail": f"recipient unresolved: {why}"})
+                paid = [t for t in in_tx if t.receiver == recipient]
+                return link.model_copy(update={
+                    "to_address": recipient, "recipient_basis": why, "destination_confirmed": True,
+                    "amount_out": link.amount_out or paid[0].formatted_amount,
+                    "destination_detail": f"{paid[0].formatted_amount} received in {paid[0].tx_hash}",
+                })
+            if in_tx is not None:
+                paid = [t for t in in_tx if t.receiver == link.to_address]
+                if paid:
+                    return link.model_copy(update={"destination_confirmed": True, "destination_detail": f"{paid[0].formatted_amount} received in {paid[0].tx_hash}"})
+                if link.to_chain is Chain.SOLANA and in_tx:
+                    # Solana transfers are reported per wallet (token-account owner); a protocol
+                    # record may name the token account instead. Not a contradiction, not a confirmation.
+                    owners = sorted({t.receiver for t in in_tx})
+                    return link.model_copy(update={"destination_confirmed": None, "destination_detail": (
+                        "the record's recipient is not a wallet paid in the destination transaction; it may be a token account "
+                        f"(wallets paid: {', '.join(owners[:4])})")})
+            history = source.history(link.to_address)
         except (ConfigError, SourceError) as exc:
             return link.model_copy(update={"destination_confirmed": None, "destination_detail": f"could not check: {exc}"})
         paid = [t for t in history.transfers if t.tx_hash.lower() == link.to_tx.lower() and t.receiver == link.to_address]
@@ -248,6 +312,7 @@ class Engine:
         return link.model_copy(update={"destination_confirmed": False, "destination_detail": detail})
 
     def run(self, request: CaseRequest, case_id: str | None = None) -> CaseResult:
+        self.window_start = request.since
         attributor = Attributor(self.labels, aliases=self.directory.aliases, trust=self.trust, providers=self.providers)
         traces: list[TraceResult] = []
         verifications: dict[str, Verification] = {}
@@ -276,7 +341,7 @@ class Engine:
             if request.follow_cross_chain and params.direction is Direction.OUT:
                 for link in self._cross_chain(result, crosschain_errors):
                     links.append(link)
-                    if link.to_chain is not None and link.to_tx and depth < request.cross_chain_depth and link.destination_confirmed is not False:
+                    if link.to_chain is not None and link.to_tx and link.to_address and depth < request.cross_chain_depth and link.destination_confirmed is not False:
                         origin = next(t for t in result.transfers if t.tx_hash == link.from_tx)
                         hops_used = next(e.hops for e in result.endpoints if e.id == link.endpoint_id)
                         cont = params.model_copy(update={"since": origin.timestamp, "until": None, "max_hops": max(1, params.max_hops - hops_used)})

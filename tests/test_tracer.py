@@ -160,3 +160,52 @@ def test_only_issuer_assets_raise_freeze_opportunity(registry):
     freezable = frozenset(t.asset.key for t in registry.tokens() if t.issuer)
     rules = {(a.rule, a.addresses[0]) for a in alerts_for(r, None, freezable)}
     assert ("A-FREEZE-OPPORTUNITY", T("a")) in rules and ("A-FUNDS-HELD", T("b")) in rules
+
+
+# --------------------------------------------------------------------------- R-COSPEND-SERVICE (Bitcoin)
+
+
+def _btc_tx(n, inputs, outputs, minutes, coinjoin=False):
+    """Transfers of one Bitcoin transaction as the Esplora adapter models them."""
+    from datetime import timedelta
+
+    from anveshak.domain import Asset, Transfer, TransferKind, UtxoContext
+
+    from .conftest import BASE
+
+    ctx = UtxoContext(input_addresses=tuple(sorted(inputs)), output_count=len(outputs), coinjoin_like=coinjoin)
+    btc = Asset(chain=Chain.BITCOIN, symbol="BTC", decimals=8, verified=True)
+    return [
+        Transfer(chain=Chain.BITCOIN, tx_hash=f"{n:064x}", kind=TransferKind.UTXO_OUTPUT, position=i, sender=s, receiver=r, asset=btc,
+                 amount=amount, block_number=800_000 + minutes, timestamp=BASE + timedelta(minutes=minutes), evidence_id="t", utxo=ctx)
+        for i, (r, amount) in enumerate(outputs) for s in sorted(inputs)
+    ]
+
+
+def test_cospent_with_busy_wallet_stops_backward_trace(registry):
+    S, HOT, DEP, B = ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+    # a user withdrew from exchange B into DEP (a deposit address at an unlabelled exchange); that
+    # exchange later paid the subject in a withdrawal that spent DEP together with its hot wallet HOT
+    txs = _btc_tx(1, [B], [(DEP, 50_000_000)], 0) + _btc_tx(2, [HOT, DEP], [(S, 40_000_000)], 10)
+    labels = [label(Chain.BITCOIN, B, SourceClass.ENTITY_ATTESTED, "https://ex1.example/por")]
+
+    def run(counts):
+        src = MemorySource(Chain.BITCOIN, txs, incomplete={HOT}, tx_counts=counts)
+        return Tracer(src, Attributor(LabelStore(labels)), registry).trace(S, TraceParams(direction=Direction.IN, max_hops=3))
+
+    stopped = run({HOT: 25_000})
+    assert not [e for e in stopped.endpoints if e.kind is EndpointKind.VASP]  # ex1 is NOT reported as the funder
+    dep = next(e for e in stopped.endpoints if e.address == DEP)
+    assert dep.kind is EndpointKind.HIGH_ACTIVITY and "R-COSPEND-SERVICE" in dep.notes[0] and HOT in dep.notes[0]
+    # a quiet co-input does not trigger the rule: ex1 is reached through DEP as before
+    quiet_src = MemorySource(Chain.BITCOIN, txs, tx_counts={HOT: 3})
+    quiet = Tracer(quiet_src, Attributor(LabelStore(labels)), registry).trace(S, TraceParams(direction=Direction.IN, max_hops=3))
+    assert [e.attribution.entity_id for e in quiet.endpoints if e.kind is EndpointKind.VASP] == ["ex1"]
+
+
+def test_cospend_rule_ignores_coinjoin(registry):
+    S, HOT, DEP, B = ("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+    txs = _btc_tx(1, [B], [(DEP, 50_000_000)], 0) + _btc_tx(2, [HOT, DEP], [(S, 40_000_000)], 10, coinjoin=True)
+    src = MemorySource(Chain.BITCOIN, txs, tx_counts={HOT: 25_000})
+    r = Tracer(src, Attributor(LabelStore([])), registry).trace(S, TraceParams(direction=Direction.IN, max_hops=3))
+    assert not any("R-COSPEND-SERVICE" in n for e in r.endpoints for n in e.notes)

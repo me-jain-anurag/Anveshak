@@ -82,6 +82,21 @@ def _env() -> Environment:
     return env
 
 
+def group_endpoints(endpoints, scores: dict) -> list[dict]:
+    """One row per (kind, address): several paths often end at the same address. The row shows
+    the shortest path's hops and the best confidence; every path is still listed in detail."""
+    groups: dict[tuple, dict] = {}
+    for e in endpoints:
+        g = groups.setdefault((e.kind, e.address), {"e": e, "paths": 0, "best": None})
+        g["paths"] += 1
+        if e.hops < g["e"].hops:
+            g["e"] = e
+        sc = scores.get(e.id)
+        if sc is not None and (g["best"] is None or sc.score > g["best"].score):
+            g["best"] = sc
+    return list(groups.values())
+
+
 def render_report(result: CaseResult) -> str:
     f = result.findings
     verifications = {v.transfer_id: v for v in f.verifications}
@@ -102,6 +117,7 @@ def render_report(result: CaseResult) -> str:
                 "routing": [d for d in f.routing if d.chain == trace.chain and d.subject == trace.subject and d.direction == trace.params.direction],
                 "analysis": analysis,
                 "scores": {sc.endpoint_id: sc for sc in analysis.confidences},
+                "groups": group_endpoints(trace.endpoints, {sc.endpoint_id: sc for sc in analysis.confidences}),
                 "flow_risks": {fr.scope.split(":", 1)[1]: fr for fr in analysis.flow_risks},
                 "continuation": continued.get(index),
             }

@@ -111,23 +111,28 @@ entities:
   - entity_id: wazirx
     display_name: WazirX
     role: vasp
+    official_sources: [wazirx.com]   # homepage title "… India's Largest Exchange | Trading Platform | WazirX", checked 2026-10-04
     fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
   - entity_id: coindcx
     display_name: CoinDCX
     role: vasp
+    # official domain not added: coindcx.com returned a Cloudflare challenge (HTTP 403) to an automated check on 2026-10-04
     fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
   - entity_id: zebpay
     display_name: ZebPay
     role: vasp
+    official_sources: [zebpay.com]   # homepage title "… Crypto Exchange | ZebPay", checked 2026-10-04
     fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
   - entity_id: coinswitch
     display_name: CoinSwitch
     role: vasp
-    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+    official_sources: [coinswitch.co]   # homepage footer "Bitcipher Labs LLP. All rights reserved.", checked 2026-10-04
+    fiu_ind_registered: {value: true, source: "https://coinswitch.co/", checked: 2026-10-04, note: "self-declared on the entity's homepage (\"registered with the Financial Intelligence Unit - India\"); fiuindia.gov.in could not be checked: its TLS certificate had expired on 2026-10-04; earlier secondary source cryptowire.in"}
   - entity_id: mudrex
     display_name: Mudrex
     role: vasp
-    fiu_ind_registered: {value: true, source: "https://www.cryptowire.in/crypto/fiu-registered-crypto-exchanges-india/", checked: 2026-09-30, note: secondary source — confirm on fiuindia.gov.in}
+    official_sources: [mudrex.com]   # homepage footer "Mudrex Inc. All rights reserved", checked 2026-10-04
+    fiu_ind_registered: {value: true, source: "https://mudrex.com/", checked: 2026-10-04, note: "self-declared on the entity's homepage (\"FIU REGISTERED\"); fiuindia.gov.in could not be checked: its TLS certificate had expired on 2026-10-04; earlier secondary source cryptowire.in"}
 
   # Stablecoin issuers — targets for freeze-review suggestions (token balance still in place).
   - entity_id: tether

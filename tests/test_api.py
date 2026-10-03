@@ -32,7 +32,24 @@ def test_synthetic_case_lifecycle(client):
     assert graph["nodes"] and graph["edges"]
     ready = next(d for d in body["result"]["findings"]["routing"] if d["status"] == "ready_for_approval")
     r = client.post(f"/v1/cases/{case_id}/routing/{ready['id']}/approve", json={"officer_name": "Test Officer", "officer_id": "T-1"})
+    assert r.status_code == 403 and "Sahyog" in r.json()["detail"]  # approvals happen in Sahyog by default
+    recs = client.get(f"/v1/cases/{case_id}/recommendations").json()
+    assert recs["schema"] == "anveshak.recommendation/v1" and recs["recommendations"][0]["data_mode"] == "synthetic"
+    rid = recs["recommendations"][0]["recommendation_id"]
+    r = client.post(f"/v1/cases/{case_id}/recommendations/{rid}/status", json={"status": "submitted"})
+    assert r.status_code == 409  # synthetic cases never get outcomes (they would pollute analytics)
+
+
+def test_standalone_approval_flag(settings):
+    from dataclasses import replace
+
+    client = TestClient(create_app(replace(settings, standalone_approvals=True)))
+    case_id = client.post("/v1/cases", json={"mode": "synthetic"}).json()["case_id"]
+    body = _wait(client, case_id)
+    ready = next(d for d in body["result"]["findings"]["routing"] if d["status"] == "ready_for_approval")
+    r = client.post(f"/v1/cases/{case_id}/routing/{ready['id']}/approve", json={"officer_name": "Test Officer", "officer_id": "T-1"})
     assert r.status_code == 409 and "synthetic" in r.json()["detail"]
+    assert client.get("/v1/meta").json()["standalone_approvals"] is True
 
 
 def test_live_case_validation(client):

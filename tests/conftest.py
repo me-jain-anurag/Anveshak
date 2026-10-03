@@ -50,7 +50,7 @@ def label(chain: Chain, address: str, klass: SourceClass, source: str, entity: s
         source_id=kw.pop("source_id", "test"),
         source_class=klass,
         primary_source=source,
-        as_of=date(2026, 1, 1),
+        as_of=kw.pop("as_of", date(2026, 1, 1)),
         dataset_ref="tests",
         **kw,
     )

@@ -80,12 +80,12 @@ def _link_hits(trace: TraceResult, links: list[CrossChainLink]) -> list[Typology
     for link in links:
         if link.endpoint_id not in endpoint_ids:
             continue
-        destination = f"{link.to_chain.value if link.to_chain else link.to_chain_code}:{link.to_address}"
+        destination = f"{link.to_chain.value if link.to_chain else link.to_chain_code}:{link.to_address or '(recipient unresolved)'}"
         hits.append(
             TypologyHit(
                 typology=Typology.CHAIN_HOPPING,
                 rule="T-CHAINHOP",
-                addresses=(link.from_address, link.to_address),
+                addresses=tuple(a for a in (link.from_address, link.to_address) if a),
                 tx_hashes=tuple(t for t in (link.from_tx, link.to_tx) if t),
                 detail=f"{link.protocol} swap {link.asset_in} -> {link.asset_out} to {destination} ({link.rule})",
             )

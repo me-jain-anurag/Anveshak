@@ -1,0 +1,145 @@
+{
+ "data": [
+  {
+   "pathway": {
+    "srcEid": 30110,
+    "dstEid": 30125,
+    "sender": {
+     "address": "0x77652d5aba086137b595875263fc200182919b92",
+     "id": "usdt0",
+     "name": "USDT0",
+     "chain": "arbitrum"
+    },
+    "receiver": {
+     "address": "0xf10e161027410128e63e75d0200fb6d34b2db243",
+     "id": "usdt0",
+     "name": "USDT0",
+     "chain": "celo"
+    },
+    "id": "30110-30125-0x77652d5aba086137b595875263fc200182919b92-0xf10e161027410128e63e75d0200fb6d34b2db243",
+    "nonce": 90750
+   },
+   "source": {
+    "status": "SUCCEEDED",
+    "tx": {
+     "txHash": "0xaf5953b261e677b3e6faffbccdb90e30fcf33433e66d57d3cbea92feff919a52",
+     "blockHash": "0x2d29c2d25e253b8a22a9ae35719700b7fa17d690266205a433e01e925489f35e",
+     "blockNumber": "511367532",
+     "blockTimestamp": 1791048654,
+     "from": "0x8c0e8acb7e813b623282a478624e32f437fc6dd6",
+     "payload": "0x0002000000000000000000000000834b9ea979badaf84dd0c787feadeaf15dd004720000000008a8cfe9",
+     "readinessTimestamp": 1791048659,
+     "options": {
+      "lzReceive": {
+       "gas": "200000",
+       "value": "0"
+      },
+      "ordered": false
+     }
+    }
+   },
+   "destination": {
+    "nativeDrop": {
+     "status": "N/A"
+    },
+    "lzCompose": {
+     "status": "N/A"
+    },
+    "tx": {
+     "txHash": "0x98c9893f139b9afa68a39f9213148419635bcf10eb627e4e324c617667506e79",
+     "blockHash": "0x5a3d33b40ee04cd084c19746cc478cb6984fdfc5b39465aa87105659cc0edd47",
+     "blockNumber": 79147921,
+     "blockTimestamp": 1791048679
+    },
+    "status": "SUCCEEDED"
+   },
+   "verification": {
+    "dvn": {
+     "dvns": {
+      "0x18f76f0d8ccd176bbe59b3870fa486d1fff87026": {
+       "txHash": "0x3eee6c5dae10e58574a64c206017434527d9708630dc2af3e09e9fce437d82b9",
+       "blockHash": "0xc750a76d5784be32388f6298dd54fbf4a20cfed30a7efa591ba613f9c18dc163",
+       "blockNumber": 79147906,
+       "blockTimestamp": 1791048664,
+       "proof": {
+        "packetHeader": "0x01000000000001627e0000759e00000000000000000000000077652d5aba086137b595875263fc200182919b92000075ad000000000000000000000000f10e161027410128e63e75d0200fb6d34b2db243",
+        "payloadHash": "0x74ad55eaeed202a12a35d1326f0d531f78edb2a3cb56d0dd33f01078e17f51ca"
+       },
+       "optional": false,
+       "status": "SUCCEEDED"
+      },
+      "0x75b073994560a5c03cd970414d9170be0c6e5c36": {
+       "txHash": "0x48169fb910b39f711343e84593eb7508a3eb6d19212cb90e50ed1775377976ab",
+       "blockHash": "0xc750a76d5784be32388f6298dd54fbf4a20cfed30a7efa591ba613f9c18dc163",
+       "blockNumber": 79147906,
+       "blockTimestamp": 1791048664,
+       "proof": {
+        "packetHeader": "0x01000000000001627e0000759e00000000000000000000000077652d5aba086137b595875263fc200182919b92000075ad000000000000000000000000f10e161027410128e63e75d0200fb6d34b2db243",
+        "payloadHash": "0x74ad55eaeed202a12a35d1326f0d531f78edb2a3cb56d0dd33f01078e17f51ca"
+       },
+       "optional": false,
+       "status": "SUCCEEDED"
+      }
+     },
+     "status": "SUCCEEDED"
+    },
+    "sealer": {
+     "tx": {
+      "txHash": "0x560ba7c8aafb4fb24824c3bfd4e06a9f5c265c393e1c87dc5b98186171ab120b",
+      "blockHash": "0xc699ae8922069973db174b2dbddf57b61b8cada7816fc0690c1f23b694ac131b",
+      "blockNumber": 79147913,
+      "blockTimestamp": 1791048671
+     },
+     "status": "SUCCEEDED"
+    }
+   },
+   "guid": "0xb5ae8a9d2e3379ae109bc1e9859f85152f3441ff845062ad942ea458a03ef96f",
+   "config": {
+    "error": false,
+    "receiveLibrary": "0xaDDed4478B423d991C21E525Cd3638FBce1AaD17",
+    "sendLibrary": "0x975bcD720be66659e3EB3C0e4F1866a3020E493A",
+    "inboundConfig": {
+     "confirmations": 20,
+     "requiredDVNCount": 2,
+     "optionalDVNCount": 0,
+     "optionalDVNThreshold": 0,
+     "requiredDVNs": [
+      "0x18f76f0d8ccd176bbe59b3870fa486d1fff87026",
+      "0x75b073994560a5c03cd970414d9170be0c6e5c36"
+     ],
+     "requiredDVNNames": [
+      "USDT0",
+      "LayerZero Labs"
+     ],
+     "optionalDVNs": [],
+     "optionalDVNNames": []
+    },
+    "outboundConfig": {
+     "confirmations": 20,
+     "requiredDVNCount": 2,
+     "optionalDVNCount": 0,
+     "optionalDVNThreshold": 0,
+     "requiredDVNs": [
+      "0x2f55c492897526677c5b68fb199ea31e2c126416",
+      "0xa8b8575fa41c305953f519c7d288cd7741727c7b"
+     ],
+     "requiredDVNNames": [
+      "LayerZero Labs",
+      "USDT0"
+     ],
+     "optionalDVNs": [],
+     "optionalDVNNames": [],
+     "executor": "0x31CAe3B7fB82d847621859fb1585353c5720660D"
+    },
+    "ulnSendVersion": "V302",
+    "ulnReceiveVersion": "V302"
+   },
+   "status": {
+    "name": "DELIVERED",
+    "message": "Executor transaction confirmed"
+   },
+   "created": "2026-10-03T17:31:01.000Z",
+   "updated": "2026-10-03T17:31:43.000Z"
+  }
+ ]
+}

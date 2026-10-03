@@ -1,0 +1,30 @@
+id: BM-14
+title: '''Entity A'' address TGuqb and transfers to Nobitex'
+chain: tron
+subject: TGuqbYqJ4m1J8dKWB3NVnsuXtgXCQkgdyf
+direction: out
+until: '2025-07-26T00:00:00Z'
+max_hops: 3
+max_expansions: 60
+claim_scope: cluster
+expected:
+  entities:
+  - nobitex
+  relation: the Entity A cluster, which includes the subject, sent large volumes to the expected VASP (stated upon information and belief)
+sources:
+- publisher: U.S. Attorney's Office, Southern District of New York
+  document: Verified complaint for forfeiture, 26 Civ. 8010, Case 1:26-cv-08010 (S.D.N.Y., filed 2026-09-14)
+  url: https://www.justice.gov/usao-sdny/media/1461216/dl
+  sha256: 3325270bb886085a975308d50b18b0f2e91c6f9133162dd9ba2191ae5ddde231
+  retrieved: '2026-10-04'
+  locator: fn. 8, PDF page 16
+  quote: The Entity A addresses are the TGuqb Address, the TBJT9 Address, and five other addresses
+- publisher: U.S. Attorney's Office, Southern District of New York
+  document: Verified complaint for forfeiture, 26 Civ. 8010, Case 1:26-cv-08010 (S.D.N.Y., filed 2026-09-14)
+  url: https://www.justice.gov/usao-sdny/media/1461216/dl
+  sha256: 3325270bb886085a975308d50b18b0f2e91c6f9133162dd9ba2191ae5ddde231
+  retrieved: '2026-10-04'
+  locator: ¶46, PDF page 17
+  quote: The Entity A addresses have been used to transfer large volumes of cryptocurrency to the Iranian cryptocurrency exchange Nobitex
+notes: The document makes the Nobitex claim about the seven Entity A addresses together, not about this address alone; results are reported as
+  cluster-level. Frozen by Tether on 2025-07-26 (¶52); the trace is bounded to before that date.
