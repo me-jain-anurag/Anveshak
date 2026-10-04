@@ -166,6 +166,8 @@ class EtherscanFake:
             return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {"timestamp": hex(ts)}})
         if action == "eth_getCode":
             return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": "0x"})
+        if action == "eth_getTransactionCount":
+            return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": "0x3"})
         return httpx.Response(200, json={"status": "0", "message": "NOTOK", "result": "Invalid action"})
 
 
@@ -184,6 +186,7 @@ def test_etherscan_history_and_verification(tmp_path, registry, monkeypatch):
     assert src.verify(token).status is VerificationStatus.VERIFIED
     assert src.verify(native).status is VerificationStatus.VERIFIED
     assert src.is_contract(E_HOT) is False
+    assert src.tx_count(E_S) == 3  # proxy eth_getTransactionCount (R-BUSY-ACCOUNT)
 
 
 def test_etherscan_error_is_surfaced(tmp_path, registry):

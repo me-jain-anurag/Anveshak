@@ -57,8 +57,9 @@ class TraceParams(Frozen):
     follow_all_assets: bool = False
     include_unverified_assets: bool = False
     check_balances: bool = True
-    # R-COSPEND-SERVICE: an address spent together with an address this busy is treated as part
-    # of the same (likely unlabelled) service, and not expanded further.
+    # R-COSPEND-SERVICE (Bitcoin): an address spent together with an address this busy is treated
+    # as part of the same (likely unlabelled) service, and not expanded further.
+    # R-BUSY-ACCOUNT (EVM): an address that has sent this many transactions is not expanded.
     high_activity_tx_count: int = Field(default=1000, ge=50)
 
 
@@ -181,6 +182,21 @@ class Tracer:
                 budget_exhausted = True
                 endpoint(EndpointKind.NOT_EXPANDED, node.address, node.hops, node.path, notes=("search budget exhausted before this address was expanded",))
                 continue
+            if node.hops > 0 and chain.family is ChainFamily.EVM:
+                sent = self._busy_account(node.address, params, source_errors)
+                if sent is not None:
+                    endpoint(
+                        EndpointKind.HIGH_ACTIVITY,
+                        node.address,
+                        node.hops,
+                        node.path,
+                        notes=(
+                            f"{sent} transactions sent from this address (account nonce at the latest block, threshold "
+                            f"{params.high_activity_tx_count}): likely an unlabelled service such as an exchange hot wallet, so its "
+                            "pooled funds are not followed (R-BUSY-ACCOUNT) — review manually",
+                        ),
+                    )
+                    continue
             try:
                 history = self.source.history(node.address)
             except SourceError as exc:
@@ -416,6 +432,18 @@ class Tracer:
                 if count is not None and count >= params.high_activity_tx_count:
                     return co, count, t.tx_hash
         return None
+
+    def _busy_account(self, address: str, params: TraceParams, errors: list[str]) -> int | None:
+        """R-BUSY-ACCOUNT (EVM, ADR-0026): the number of transactions an address has sent, if it
+        reaches the high-activity threshold. A lifetime count, so it holds even where the history
+        itself is only a window (RPC log scan). If the count cannot be read, the address is
+        expanded as before and the failure is reported as a coverage gap."""
+        try:
+            sent = self.source.tx_count(address)
+        except SourceError as exc:
+            errors.append(f"{address}: transaction count: {exc}")
+            return None
+        return sent if sent is not None and sent >= params.high_activity_tx_count else None
 
     @staticmethod
     def _previous_address(node: _Node, transfers: dict[str, Transfer], out: bool) -> str | None:

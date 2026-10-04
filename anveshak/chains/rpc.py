@@ -262,6 +262,15 @@ class RpcLogSource(ChainSource):
                 return True
         return False
 
+    def tx_count(self, address: str) -> int | None:
+        """Transactions sent from the address so far (its nonce at the latest block): a
+        lifetime figure, unlike the window-limited history (R-BUSY-ACCOUNT, ADR-0026)."""
+        nonce, _ = self._rpc("eth_getTransactionCount", [normalize(self.chain, address), "latest"])
+        try:
+            return int(str(nonce), 16)
+        except ValueError as exc:
+            raise SourceError(f"{self.chain} eth_getTransactionCount returned {nonce!r}") from exc
+
     def is_contract(self, address: str) -> bool | None:
         address = normalize(self.chain, address)
         if address not in self._contract_cache:

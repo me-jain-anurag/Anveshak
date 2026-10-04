@@ -170,10 +170,13 @@ def cmd_replay(args) -> int:
     if directory.snapshot_hash() != original.findings.directory_snapshot:
         problems.append("VASP directory differs from the one used originally")
     fetcher = ReplayFetcher(EvidenceStore(pack / "evidence")) if pack else None
-    engine = Engine(DataMode.REPLAY, labels, registry, directory, settings=settings, fetcher=fetcher)
+    # the recorded source configuration (ADR-0025) decides which requests are replayed, not the local settings
+    recorded = original.findings.source_config
+    engine = Engine(DataMode.REPLAY, labels, registry, directory, settings=settings, fetcher=fetcher, source_config=recorded)
     replayed = engine.run(original.findings.request, case_id=original.case_id)
-    # Replay runs in REPLAY mode; compare with the mode field normalised.
-    replay_findings = replayed.findings.model_copy(update={"data_mode": DataMode.LIVE})
+    # Replay runs in REPLAY mode; compare with the mode field normalised. Cases recorded before
+    # ADR-0025 carry no source configuration: they replay with the current settings, as before.
+    replay_findings = replayed.findings.model_copy(update={"data_mode": DataMode.LIVE, **({} if recorded else {"source_config": None})})
     from .case import findings_hash
 
     same = findings_hash(replay_findings) == original.findings_hash

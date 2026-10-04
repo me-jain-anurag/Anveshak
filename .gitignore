@@ -5,3 +5,5 @@ __pycache__/
 .env
 # runtime state (evidence objects, case database, generated reports)
 var/
+# benchmark run outputs (the published summary is docs/benchmark.md)
+benchmarks/results/

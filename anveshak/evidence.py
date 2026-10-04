@@ -8,20 +8,22 @@ can be checked at any time (`EvidenceStore.read` re-hashes on every read).
 A `ReplayFetcher` answers requests only from the store. Re-running a case in replay mode
 must reproduce the findings hash exactly — this is tested.
 
-Secrets (API keys) are redacted before a request is recorded; they never reach disk.
+Secrets (API keys, and credentials inside JSON-RPC endpoint URLs) are redacted before a request
+is recorded; they never reach disk (ADR-0025).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -43,8 +45,48 @@ def redact_params(params: dict[str, Any] | None) -> dict[str, str]:
     return {k: ("<redacted>" if k.lower() in SECRET_PARAMS else str(v)) for k, v in sorted((params or {}).items())}
 
 
+_TOKEN_CHARS = re.compile(r"[A-Za-z0-9_-]{20,}")
+
+
+def _is_token(segment: str) -> bool:
+    # Provider keys are long random strings: hex or mixed-case base62. Method names such as
+    # TronGrid's `gettransactioninfobyid` are long too, but have neither digits nor mixed case.
+    return bool(_TOKEN_CHARS.fullmatch(segment)) and (any(c.isdigit() for c in segment) or (segment.lower() != segment and segment.upper() != segment))
+
+
+def redact_endpoint(url: str) -> str:
+    """A POST endpoint URL with any credential in it masked.
+
+    Hosted node providers put the key in the URL itself: in the path (Infura `/v3/<key>`,
+    Alchemy `/v2/<key>`, QuickNode `/<token>/`), in userinfo or in a query parameter. Only
+    POST endpoints are treated this way: a GET URL carries addresses and transaction ids in
+    its path, which are not secrets and must stay distinct. URLs without credentials come
+    back unchanged, so evidence recorded earlier keeps its request keys.
+    """
+    parts = urlsplit(url)
+    netloc = parts.netloc
+    if "@" in netloc:
+        netloc = "<redacted>@" + netloc.rsplit("@", 1)[1]
+    path = "/".join("<redacted>" if _is_token(s) else s for s in parts.path.split("/"))
+    query = parts.query
+    if query:
+        pairs = parse_qsl(query, keep_blank_values=True)
+        if any(k.lower() in SECRET_PARAMS for k, _ in pairs):
+            query = urlencode([(k, "<redacted>" if k.lower() in SECRET_PARAMS else v) for k, v in pairs], safe="<>")
+    return urlunsplit((parts.scheme, netloc, path, query, parts.fragment))
+
+
+def host_of(url: str) -> str:
+    """host[:port] without any userinfo, for messages and pacing."""
+    return urlsplit(url).netloc.rsplit("@", 1)[-1]
+
+
+def recorded_url(method: str, url: str) -> str:
+    return redact_endpoint(url) if method == "POST" else url
+
+
 def request_key(method: str, url: str, params: dict[str, Any] | None, body: Any) -> str:
-    return sha256_hex(canonical_json({"method": method, "url": url, "params": redact_params(params), "body": body}))
+    return sha256_hex(canonical_json({"method": method, "url": recorded_url(method, url), "params": redact_params(params), "body": body}))
 
 
 @dataclass(frozen=True)
@@ -137,7 +179,7 @@ def _parse_json(raw: bytes, url: str, status: int = 200) -> Any:
     except ValueError as exc:
         if status != 200:
             return None  # an accepted error status (e.g. 404) with a non-JSON body
-        raise SourceError(f"{urlsplit(url).netloc} returned a non-JSON response") from exc
+        raise SourceError(f"{host_of(url)} returned a non-JSON response") from exc
 
 
 class LiveFetcher(_Tracking):
@@ -170,7 +212,7 @@ class LiveFetcher(_Tracking):
             self._last_call[host] = time.monotonic()
 
     def _request(self, method: str, url: str, params: dict | None, body: Any, headers: dict | None, accept: tuple[int, ...] = ()) -> Fetched:
-        host = urlsplit(url).netloc
+        host = host_of(url)
         last_error: str = ""
         response: httpx.Response | None = None
         for attempt in range(self.retries + 1):
@@ -195,7 +237,7 @@ class LiveFetcher(_Tracking):
         request = {
             "request_key": request_key(method, url, params, body),
             "method": method,
-            "url": url,
+            "url": recorded_url(method, url),
             "params": redact_params(params),
             "body": body,
             "headers": sorted(k for k in (headers or {}) if k.lower() not in SECRET_HEADERS),
@@ -222,11 +264,11 @@ class ReplayFetcher(_Tracking):
         key = request_key(method, url, params, body)
         record = self.store.lookup_record(key)
         if record is None:
-            raise EvidenceMissing(f"no recorded response for {method} {url} {redact_params(params)}")
+            raise EvidenceMissing(f"no recorded response for {method} {recorded_url(method, url)} {redact_params(params)}")
         evidence_id = record["evidence_id"]
         status = int(record.get("status_code", 200))
         if status >= 400 and status not in accept:
-            raise SourceError(f"{urlsplit(url).netloc} returned HTTP {status} (recorded)")
+            raise SourceError(f"{host_of(url)} returned HTTP {status} (recorded)")
         raw = self.store.read(evidence_id)
         self._track(evidence_id)
         return Fetched(_parse_json(raw, url, status), evidence_id, status)

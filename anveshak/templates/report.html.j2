@@ -56,6 +56,9 @@
     <dt>Directory snapshot</dt><dd><code>{{ findings.directory_snapshot }}</code></dd>
     <dt>Scoring policy</dt><dd>version {{ findings.policy_version }} · <code>{{ findings.policy_snapshot }}</code></dd>
     <dt>Evidence objects</dt><dd>{{ findings.evidence_ids | length }} referenced by findings ({{ result.fetched_evidence_count }} fetched in total)</dd>
+    {% if findings.source_config %}
+    <dt>Data sources</dt><dd>{% for c in findings.source_config.chains %}{{ c.chain.display_name }}: {{ {"etherscan": "Etherscan API", "rpc": "JSON-RPC log scan", "trongrid": "TronGrid API", "solana-rpc": "Solana JSON-RPC", "esplora": "Esplora API"}.get(c.backend, c.backend) }} <span class="mono">{{ c.endpoint }}</span>{% if c.window_hours %}, {{ c.window_hours }}-hour window from the incident time{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if findings.source_config.resolvers %}<br>Cross-chain resolvers: {{ findings.source_config.resolvers | join(", ") }}{% endif %}</dd>
+    {% endif %}
   </dl>
 </header>
 

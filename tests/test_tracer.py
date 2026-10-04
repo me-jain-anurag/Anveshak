@@ -209,3 +209,23 @@ def test_cospend_rule_ignores_coinjoin(registry):
     src = MemorySource(Chain.BITCOIN, txs, tx_counts={HOT: 25_000})
     r = Tracer(src, Attributor(LabelStore([])), registry).trace(S, TraceParams(direction=Direction.IN, max_hops=3))
     assert not any("R-COSPEND-SERVICE" in n for e in r.endpoints for n in e.notes)
+
+def test_busy_account_is_not_expanded_on_evm(registry):
+    usdt = registry.token(Chain.ETHEREUM, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT", 6)
+    assert usdt.verified
+    S, HOT, B = "0x" + "11" * 20, "0x" + "22" * 20, "0x" + "33" * 20
+    # the subject pays HOT, an unlabelled exchange hot wallet, which later pays exchange B out of pooled funds
+    txs = [xfer(usdt, S, HOT, 10 * U, 0), xfer(usdt, HOT, B, 500 * U, 10)]
+    labels = [label(Chain.ETHEREUM, B, SourceClass.ENTITY_ATTESTED, "https://ex1.example/por")]
+
+    def run(counts):
+        src = MemorySource(Chain.ETHEREUM, txs, tx_counts=counts)
+        return Tracer(src, Attributor(LabelStore(labels)), registry).trace(S, TraceParams(max_hops=3))
+
+    stopped = run({HOT: 250_000, S: 250_000})  # the subject itself is always expanded
+    assert not [e for e in stopped.endpoints if e.kind is EndpointKind.VASP]  # ex1 is NOT reported
+    hot = next(e for e in stopped.endpoints if e.address == HOT)
+    assert hot.kind is EndpointKind.HIGH_ACTIVITY and hot.hops == 1 and "R-BUSY-ACCOUNT" in hot.notes[0] and "250000 transactions" in hot.notes[0]
+    # a quiet address, or a source that cannot count, does not trigger the rule: ex1 is reached as before
+    for counts in ({HOT: 12}, {}):
+        assert [e.attribution.entity_id for e in run(counts).endpoints if e.kind is EndpointKind.VASP] == ["ex1"]

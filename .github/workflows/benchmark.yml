@@ -16,6 +16,11 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    # the replay must use the same source configuration as the live run: requests are matched exactly
+    env:
+      ANVESHAK_RPC_ETHEREUM: ${{ inputs.ethereum_rpc }}
+      ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -23,10 +28,6 @@ jobs:
           python-version: "3.12"
       - run: pip install -e .
       - name: Run all cases live (evidence recorded under var/)
-        env:
-          ANVESHAK_RPC_ETHEREUM: ${{ inputs.ethereum_rpc }}
-          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-          TRONGRID_API_KEY: ${{ secrets.TRONGRID_API_KEY }}
         run: anveshak benchmark
       - name: Replay from the recorded evidence (no network needed for this step)
         run: anveshak benchmark --replay --no-doc

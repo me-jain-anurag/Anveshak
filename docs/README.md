@@ -37,3 +37,5 @@
 | [0022](adr/0022-bridge-resolvers.md) | Wormhole, LayerZero and Across resolvers; THORChain vault labels |
 | [0023](adr/0023-api-clients-scoping-audit.md) | Per-client keys, roles, agency scoping, limits, append-only audit log |
 | [0024](adr/0024-cospend-with-busy-wallet-stops-trace.md) | Co-spend with a high-activity address stops the trace (R-COSPEND-SERVICE; from benchmark BM-10) |
+| [0025](adr/0025-replay-uses-recorded-source-config.md) | Replay uses the recorded data-source configuration; endpoint credentials are redacted |
+| [0026](adr/0026-busy-account-stops-trace.md) | A busy account stops the trace on EVM chains (R-BUSY-ACCOUNT; from benchmark BM-04/BM-07) |

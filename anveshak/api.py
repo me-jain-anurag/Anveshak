@@ -47,6 +47,7 @@ from .chain import ETHERSCAN_FREE_TIER, Chain, ChainFamily
 from .clients import ApiClient, RateLimiter
 from .config import Settings, load_settings
 from .domain import Category, Direction, SourceClass
+from .evidence import redact_endpoint
 from .exports import to_cypher, to_graphml
 from .gateway import DryRunSahyogGateway
 from .graph import build_graph
@@ -243,7 +244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for chain in Chain:
             if chain.family is ChainFamily.EVM:
                 if evm_backend(s, chain) == "rpc":
-                    ok, note = True, f"public JSON-RPC log scan ({s.evm_rpc_urls[chain.value]}): verified tokens only, window-limited — requires the incident time"
+                    ok, note = True, f"public JSON-RPC log scan ({redact_endpoint(s.evm_rpc_urls[chain.value])}): verified tokens only, window-limited — requires the incident time"
                 else:
                     ok = bool(s.etherscan_api_key)
                     note = "Etherscan API V2" + ("" if ok else " — ETHERSCAN_API_KEY not set")
@@ -252,7 +253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             elif chain is Chain.TRON:
                 ok, note = True, "TronGrid" + (" (with API key)" if s.trongrid_api_key else " (no key: rate-limited)")
             elif chain is Chain.SOLANA:
-                ok, note = True, f"JSON-RPC at {s.solana_rpc_url}"
+                ok, note = True, f"JSON-RPC at {redact_endpoint(s.solana_rpc_url)}"
             else:
                 ok, note = True, f"Esplora at {s.esplora_base_url}"
             chains.append({"chain": chain.value, "name": chain.display_name, "configured": ok, "note": note})

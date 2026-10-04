@@ -33,7 +33,7 @@ from .crosschain import RESOLVERS, CrossChainLink, recipient_from_destination
 from .directory import VaspDirectory
 from .domain import Direction, EndpointKind, Frozen
 from .errors import ConfigError, SourceError
-from .evidence import EvidenceStore, Fetcher, LiveFetcher, ReplayFetcher, canonical_json, sha256_hex
+from .evidence import EvidenceStore, Fetcher, LiveFetcher, ReplayFetcher, canonical_json, redact_endpoint, sha256_hex
 from .labels.store import LabelStore
 from .policy import ScoringPolicy
 from .risk import RiskAssessment
@@ -103,6 +103,28 @@ class Continuation(Frozen):
     parent_trace_index: int
 
 
+class ChainSourceConfig(Frozen):
+    """How one chain's data was obtained. No secrets: POST endpoints are recorded redacted."""
+
+    chain: Chain
+    backend: str  # "etherscan" | "rpc" (window-limited log scan) | "trongrid" | "solana-rpc" | "esplora"
+    endpoint: str
+    window_hours: int | None = None  # rpc only
+    max_span: int | None = None  # rpc only
+    max_signatures: int | None = None  # solana-rpc only
+
+
+class SourceConfig(Frozen):
+    """The data-source settings that decide which requests a case makes (ADR-0025).
+
+    Recorded in the findings so that a replay asks the evidence store for exactly the requests
+    the live run made, whatever the replaying machine is configured with.
+    """
+
+    chains: tuple[ChainSourceConfig, ...] = ()
+    resolvers: tuple[str, ...] = ()
+
+
 class CaseFindings(Frozen):
     engine_version: str
     data_mode: DataMode
@@ -120,6 +142,7 @@ class CaseFindings(Frozen):
     crosschain_errors: tuple[str, ...]
     routing: tuple[RoutingDecision, ...]
     evidence_ids: tuple[str, ...]  # evidence the findings rest on (transfers, verifications, balances)
+    source_config: SourceConfig | None = None  # None: synthetic, or recorded before ADR-0025
 
 
 class CaseResult(Frozen):
@@ -131,7 +154,10 @@ class CaseResult(Frozen):
 
 
 def findings_hash(findings: CaseFindings) -> str:
-    return sha256_hex(canonical_json(findings.model_dump(mode="json")))
+    data = findings.model_dump(mode="json")
+    if data.get("source_config") is None:
+        data.pop("source_config", None)  # findings without it hash exactly as they did before ADR-0025
+    return sha256_hex(canonical_json(data))
 
 
 def evm_backend(settings: Settings, chain: Chain) -> str:
@@ -181,6 +207,7 @@ class Engine:
         trust: SourceTrust | None = None,
         providers: list | None = None,
         resolvers: list | None = None,
+        source_config: SourceConfig | None = None,
     ):
         self.mode = mode
         self.labels = labels
@@ -192,6 +219,11 @@ class Engine:
         self.settings = settings
         self.window_start: datetime | None = None  # bounds RPC log scans (set from the request)
         self._sources: dict[Chain, ChainSource] = dict(sources or {})
+        # replay: reuse the recorded source configuration; live: record what is used
+        if source_config is not None and mode is not DataMode.REPLAY:
+            raise ValueError("a recorded source configuration is only used to replay (its endpoints are redacted)")
+        self._recorded = {c.chain: c for c in source_config.chains} if source_config is not None else {}
+        self._used: dict[Chain, ChainSourceConfig] = {}
         self.fetcher = fetcher
         if mode is DataMode.SYNTHETIC and not sources:
             raise ValueError("synthetic mode needs in-memory sources")
@@ -205,7 +237,10 @@ class Engine:
         elif mode is DataMode.SYNTHETIC:
             self.resolvers = []
         else:
-            names = settings.crosschain_resolvers if settings is not None else tuple(RESOLVERS)
+            if source_config is not None:
+                names = source_config.resolvers
+            else:
+                names = settings.crosschain_resolvers if settings is not None else tuple(RESOLVERS)
             self.resolvers = [RESOLVERS[n](self.fetcher) for n in names if n in RESOLVERS]
 
     def source(self, chain: Chain) -> ChainSource:
@@ -218,29 +253,65 @@ class Engine:
             raise ConfigError(f"no synthetic data for {chain}")
         s = self.settings
         assert s is not None and self.fetcher is not None
-        if chain.family is ChainFamily.EVM and evm_backend(s, chain) == "rpc":
+        if chain in self._recorded:
+            cfg = self._recorded[chain]
+            url = cfg.endpoint  # redacted where needed; request keys are computed on the redacted form
+        else:
+            cfg, url = self._configured(chain)
+        if cfg.backend == "rpc":
             if self.window_start is None:
                 raise ConfigError(
                     f"{chain.display_name} is traced through a public RPC log scan (no Etherscan plan covers it): "
                     "the incident time `since` is required to bound the scan window"
                 )
             src: ChainSource = RpcLogSource(
-                chain, self.fetcher, self.registry, rpc_url=s.evm_rpc_urls[chain.value], window_start=self.window_start,
+                chain, self.fetcher, self.registry, rpc_url=url, window_start=self.window_start,
+                window_hours=cfg.window_hours or s.logscan_window_hours, max_span=cfg.max_span or 5000,
+            )
+        elif cfg.backend == "etherscan":
+            src = EtherscanSource(
+                chain, self.fetcher, self.registry, api_key=s.etherscan_api_key, base_url=url,
+                require_key=self.mode is DataMode.LIVE,
+            )
+        elif cfg.backend == "trongrid":
+            src = TronGridSource(self.fetcher, self.registry, api_key=s.trongrid_api_key, base_url=url)
+        elif cfg.backend == "solana-rpc":
+            src = SolanaRpcSource(self.fetcher, self.registry, rpc_url=url, max_signatures=cfg.max_signatures or s.solana_max_signatures)
+        else:
+            src = EsploraSource(self.fetcher, self.registry, base_url=url)
+        self._used[chain] = cfg
+        self._sources[chain] = CachingSource(src)
+        return self._sources[chain]
+
+    def _configured(self, chain: Chain) -> tuple[ChainSourceConfig, str]:
+        """(what the findings record, the URL actually called) for a chain, from the settings."""
+        s = self.settings
+        assert s is not None
+        if chain.family is ChainFamily.EVM and evm_backend(s, chain) == "rpc":
+            url = s.evm_rpc_urls[chain.value]
+            cfg = ChainSourceConfig(
+                chain=chain, backend="rpc", endpoint=redact_endpoint(url),
                 window_hours=s.logscan_window_hours, max_span=int(s.rpc_max_span.get(chain.value, 5000)),
             )
         elif chain.family is ChainFamily.EVM:
-            src = EtherscanSource(
-                chain, self.fetcher, self.registry, api_key=s.etherscan_api_key, base_url=s.etherscan_base_url,
-                require_key=self.mode is DataMode.LIVE,
-            )
+            url = s.etherscan_base_url
+            cfg = ChainSourceConfig(chain=chain, backend="etherscan", endpoint=url)
         elif chain is Chain.TRON:
-            src = TronGridSource(self.fetcher, self.registry, api_key=s.trongrid_api_key, base_url=s.trongrid_base_url)
+            url = s.trongrid_base_url
+            cfg = ChainSourceConfig(chain=chain, backend="trongrid", endpoint=url)
         elif chain is Chain.SOLANA:
-            src = SolanaRpcSource(self.fetcher, self.registry, rpc_url=s.solana_rpc_url, max_signatures=s.solana_max_signatures)
+            url = s.solana_rpc_url
+            cfg = ChainSourceConfig(chain=chain, backend="solana-rpc", endpoint=redact_endpoint(url), max_signatures=s.solana_max_signatures)
         else:
-            src = EsploraSource(self.fetcher, self.registry, base_url=s.esplora_base_url)
-        self._sources[chain] = CachingSource(src)
-        return self._sources[chain]
+            url = s.esplora_base_url
+            cfg = ChainSourceConfig(chain=chain, backend="esplora", endpoint=url)
+        return cfg, url
+
+    def source_config(self) -> SourceConfig | None:
+        if self.mode is DataMode.SYNTHETIC:
+            return None
+        names = tuple(getattr(r, "name", type(r).__name__) for r in self.resolvers)
+        return SourceConfig(chains=tuple(self._used[c] for c in sorted(self._used, key=lambda c: c.value)), resolvers=names)
 
     def _cross_chain(self, result: TraceResult, errors: list[str]) -> list[CrossChainLink]:
         """Ask each resolver whether the last transfer of a candidate path was a cross-chain swap."""
@@ -387,6 +458,7 @@ class Engine:
             crosschain_errors=tuple(crosschain_errors),
             routing=tuple(sorted(decisions, key=lambda d: (d.chain, d.subject, d.direction, d.status, d.target_name))),
             evidence_ids=tuple(sorted(evidence)),
+            source_config=self.source_config(),
         )
         return CaseResult(
             case_id=case_id or uuid.uuid4().hex,

@@ -54,4 +54,5 @@ before it is described here.
   labelled. The price is that the trace stops at the exchange's wallet without naming it. Only
   a label can name an exchange, and that label must come from a source.
 - Account-model chains are unaffected: they have no multi-input transactions. Their hot-wallet
-  sweeps are handled by R-SWEEP and the high-activity endpoint.
+  sweeps are handled by R-SWEEP and the high-activity endpoint. On EVM chains that proved
+  insufficient with window-limited histories; see ADR-0026 (R-BUSY-ACCOUNT).

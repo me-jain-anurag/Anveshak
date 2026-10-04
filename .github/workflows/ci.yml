@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install
         run: pip install -e ".[dev]"
-      - name: Tests (no network: every adapter test uses captured response shapes)
+      - name: "Tests (no network: every adapter test uses captured response shapes)"
         run: pytest -q
       - name: Synthetic demo runs end to end
         run: anveshak demo

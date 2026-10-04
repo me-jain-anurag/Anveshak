@@ -17,7 +17,7 @@ invent data.
   `Balance.evidence_id`, `CrossChainLink.evidence_id`, intel labels' `dataset_ref`).
 - Every read re-hashes the object. A modified object raises `EvidenceCorrupted`.
 - **API keys never reach disk**: secret query parameters and headers are redacted before a request
-  is recorded or used as an index key.
+  is recorded or used as an index key, and so are credentials in JSON-RPC endpoint URLs (ADR-0025).
 - `CaseFindings` contains only what the conclusions depend on (request, label/directory/policy
   snapshots, traces, verifications, analyses, routing, cross-chain links, evidence ids). It has no
   wall-clock times or random ids. Its SHA-256 is the **findings hash**.
@@ -29,3 +29,5 @@ invent data.
 - The evidence store grows with use. It is append-only and can be archived per case.
 - Replay needs the same label, directory and policy snapshots. Their hashes are in the findings,
   and replay reports any difference.
+- Replay uses the data-source configuration recorded in the findings, not the local settings
+  (ADR-0025).

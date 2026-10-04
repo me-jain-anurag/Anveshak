@@ -73,7 +73,7 @@ Live tracing uses public APIs. Copy `.env.example` to `.env`:
 anveshak trace --chain tron --address T... --case-ref "FIR 123/2026" --direction both
 anveshak trace --chain bsc --address 0x... --case-ref "FIR 124/2026" --since 2026-09-01T00:00:00+05:30
 anveshak replay <case_id>              # re-run from stored evidence; the findings hash must match
-anveshak trace ... --pack packs/case1 # record a self-contained evidence pack; `anveshak replay --pack packs/case1` offline
+anveshak trace ... --pack packs/case1 # record a self-contained evidence pack; `anveshak replay --pack packs/case1` offline, on any machine
 anveshak worker                        # extra worker process (shares the case queue)
 anveshak monitor --once                # check watched addresses now
 anveshak export <case_id> --format neo4j
@@ -93,7 +93,7 @@ docker compose up --scale worker=4
 - [Sahyog integration guide](docs/sahyog-integration.md): Sahyog as the client; recommendations,
   outcomes, replies, screening, keys and scope
 - [Benchmark](docs/benchmark.md): cases from public court filings, results and limits
-- [Decision records](docs/adr/): 24 ADRs
+- [Decision records](docs/adr/): 26 ADRs
 - [References](docs/references.md): every paper, dataset, API, document and standard used, and where
 
 ## Tests

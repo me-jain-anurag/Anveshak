@@ -20,7 +20,7 @@ from anveshak.chains.base import TRANSFER_TOPIC, VerificationStatus
 from anveshak.chains.rpc import RpcLogSource
 from anveshak.domain import Category, SourceClass
 from anveshak.errors import ConfigError, SourceError
-from anveshak.evidence import EvidenceStore, LiveFetcher, ReplayFetcher
+from anveshak.evidence import EvidenceStore, LiveFetcher, ReplayFetcher, canonical_json, redact_endpoint, sha256_hex
 from anveshak.labels.store import LabelStore
 
 from .conftest import label
@@ -193,6 +193,7 @@ def test_rpc_extras(tmp_path, registry):
     assert src.has_activity(S) is True  # nonce 2
     assert src.has_activity(HOT) is True  # USDT balance via balanceOf
     assert src.has_activity(X) is False
+    assert src.tx_count(S) == 2 and src.tx_count(HOT) == 0  # nonce: transactions sent (R-BUSY-ACCOUNT)
     moved = src.tx_transfers(TX_OUT)
     assert [(m.sender, m.receiver) for m in moved] == [(S, HOT)]
     assert src.tx_transfers("0x" + "0" * 64) == []
@@ -221,3 +222,50 @@ def test_engine_requires_since_and_replays_exactly(tmp_path, registry, real_dire
     assert live.findings.traces[0].coverage.windowed_histories
     replayed = Engine(DataMode.REPLAY, labels, registry, real_directory, settings=settings, fetcher=ReplayFetcher(store)).run(request)
     assert findings_hash(replayed.findings.model_copy(update={"data_mode": DataMode.LIVE})) == live.findings_hash
+
+
+KEY = "9f2c1e4b7a6d4c3e8b1a0f9e8d7c6b5a"
+
+
+def test_endpoint_credentials_are_redacted():
+    assert redact_endpoint(f"https://mainnet.infura.io/v3/{KEY}") == "https://mainnet.infura.io/v3/<redacted>"
+    assert redact_endpoint("https://eth-mainnet.g.alchemy.com/v2/AbCdEfGhIjKlMnOpQrStUvWx") == "https://eth-mainnet.g.alchemy.com/v2/<redacted>"
+    assert redact_endpoint(f"https://name.quiknode.pro/{KEY}/") == "https://name.quiknode.pro/<redacted>/"
+    assert redact_endpoint("https://user:pa55@node.test/rpc?token=abc&x=1") == "https://<redacted>@node.test/rpc?token=<redacted>&x=1"
+    for public in ("https://rpc.mevblocker.io", "https://arb1.arbitrum.io/rpc", "https://api.mainnet-beta.solana.com",
+                   "https://api.trongrid.io/wallet/gettransactioninfobyid"):  # long method names are not tokens
+        assert redact_endpoint(public) == public  # unchanged, so earlier evidence keeps its request keys
+    once = redact_endpoint(f"https://u:p@node.test/v3/{KEY}?apikey=k")
+    assert redact_endpoint(once) == once
+
+
+def test_replay_uses_recorded_source_config_and_keys_never_reach_disk(tmp_path, registry, real_directory, settings):
+    keyed = f"https://bsc.rpc.test/v3/{KEY}"
+    live_settings = replace(settings, evm_rpc_urls={**settings.evm_rpc_urls, "bsc": keyed}, logscan_window_hours=96)
+    labels = LabelStore([label(Chain.BSC, HOT, SourceClass.ENTITY_ATTESTED, "https://www.binance.com/en/blog/por", entity="binance", category=Category.EXCHANGE)])
+    store = EvidenceStore(settings.evidence_dir)
+    fetcher = LiveFetcher(store, client=httpx.Client(transport=httpx.MockTransport(FakeNode())))
+    since = datetime.fromtimestamp(ts_of(START_BLOCK), tz=timezone.utc) + timedelta(seconds=1)
+    request = CaseRequest(case_reference="R-2", subjects=(Subject(chain=Chain.BSC, address=S),), since=since)
+    live = Engine(DataMode.LIVE, labels, registry, real_directory, settings=live_settings, fetcher=fetcher).run(request)
+    recorded = live.findings.source_config
+    assert [(c.chain, c.backend, c.endpoint, c.window_hours) for c in recorded.chains] == [(Chain.BSC, "rpc", "https://bsc.rpc.test/v3/<redacted>", 96)]
+    assert KEY not in live.model_dump_json()
+    from anveshak.report import render_report
+
+    html = render_report(live)
+    assert "JSON-RPC log scan" in html and "https://bsc.rpc.test/v3/&lt;redacted&gt;" in html and "96-hour window" in html and KEY not in html
+    assert not any(KEY in f.read_text(encoding="utf-8", errors="ignore") for f in settings.evidence_dir.rglob("*") if f.is_file())
+
+    # A machine configured differently (here: it would pick Etherscan for BSC, with a 24-hour window)
+    # replays exactly, because the recorded configuration decides which requests are replayed.
+    other = replace(settings, etherscan_paid=True, logscan_window_hours=24)
+    assert evm_backend(other, Chain.BSC) == "etherscan"
+    replayed = Engine(DataMode.REPLAY, labels, registry, real_directory, settings=other, fetcher=ReplayFetcher(store), source_config=recorded).run(request)
+    assert findings_hash(replayed.findings.model_copy(update={"data_mode": DataMode.LIVE})) == live.findings_hash
+
+    # Findings recorded before ADR-0025 have no source configuration and keep their original hash.
+    legacy = live.findings.model_copy(update={"source_config": None})
+    data = legacy.model_dump(mode="json")
+    data.pop("source_config")
+    assert findings_hash(legacy) == sha256_hex(canonical_json(data))

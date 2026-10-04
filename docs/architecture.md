@@ -39,7 +39,8 @@ A case moves through these stages:
 2. **Trace.** Time-respecting BFS per subject and direction (ADR-0006). Each address history comes
    from a `ChainSource`. Every raw response is stored in the evidence store (ADR-0004), including
    recorded "not found" answers. Bitcoin addresses co-spent with high-activity wallets are not
-   expanded (R-COSPEND-SERVICE, ADR-0024).
+   expanded (R-COSPEND-SERVICE, ADR-0024), nor are EVM addresses that have sent at least the
+   high-activity threshold of transactions (R-BUSY-ACCOUNT, ADR-0026).
 3. **Attribute.** Labels (stored, attested, provider) are re-checked for source class (ADR-0005)
    and graded A/B/C/X. Formal denials apply first (G-N1, ADR-0020). Derivations D-COSPEND and
    D-EVM-KEY apply.
@@ -65,13 +66,13 @@ A case moves through these stages:
 |---|---|
 | `chain.py`, `addresses.py` | chains; strict address validation (Base58Check, bech32/m, EIP-55, Solana), Tron hex↔base58, ed25519 on-curve / PDA, chain detection |
 | `domain.py` | immutable facts / claims / inferences |
-| `evidence.py` | content-addressed store, live and replay fetchers (accepted error statuses recorded), secret redaction |
+| `evidence.py` | content-addressed store, live and replay fetchers (accepted error statuses recorded), secret redaction incl. endpoint URLs (ADR-0025) |
 | `chains/` | `evm.py` (Etherscan), `rpc.py` (JSON-RPC log scan), `evm_common.py`, `tron.py`, `bitcoin.py`, `solana.py`, `memory.py` (tests/demo), `base.py` (interface, caching) |
 | `assets.py` + `data/assets.yaml` | verified token registry |
 | `labels/` | label store and importers (GraphSense, OFAC, THORChain vaults, attestations incl. denials) |
 | `sourcetrust.py` + `data/authorities.yaml` | claimed-versus-earned source class |
 | `attribution.py` | grading rules G-* (incl. G-N1), derivations D-* |
-| `tracer.py` | search, endpoints, coverage, balances, R-SWEEP, R-COSPEND-SERVICE |
+| `tracer.py` | search, endpoints, coverage, balances, R-SWEEP, R-COSPEND-SERVICE, R-BUSY-ACCOUNT |
 | `verify.py` | path re-verification |
 | `crosschain/` | link model; THORChain, Wormhole, LayerZero, Across resolvers |
 | `policy.py` + `data/scoring_policy.yaml` | typed, hashed scoring policy |
@@ -91,7 +92,8 @@ A case moves through these stages:
 
 - **Input.** Every address is checksum-validated before use. Request models are strict pydantic.
   Request bodies are capped (`ANVESHAK_MAX_BODY_BYTES`).
-- **Secrets.** API keys come from the environment only and are redacted from evidence records.
+- **Secrets.** API keys come from the environment only and are redacted from evidence records,
+  findings, reports and `/v1/meta`, including keys embedded in JSON-RPC endpoint URLs (ADR-0025).
   Client keys are stored as sha256 only. `.env` is git-ignored.
 - **API access (ADR-0023).**
   * Each client has its own key, roles and optional agency scope. Other agencies' cases return
