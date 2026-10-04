@@ -2,6 +2,7 @@
 
 | Document | What it covers |
 |---|---|
+| [usage.md](usage.md) | user guide: install, concepts, CLI, dashboard, API, deployment, configuration, troubleshooting |
 | [requirements-traceability.md](requirements-traceability.md) | every PS 26182 clause → implementation → test → status |
 | [architecture.md](architecture.md) | pipeline, modules, security, running, known limitations |
 | [sahyog-integration.md](sahyog-integration.md) | API contract for the Sahyog portal (Sahyog is the client): reports, recommendations, outcomes, replies, screening, keys and scope |

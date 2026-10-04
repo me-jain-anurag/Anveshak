@@ -7,3 +7,5 @@ __pycache__/
 var/
 # benchmark run outputs (the published summary is docs/benchmark.md)
 benchmarks/results/
+# evidence packs are case data: keep them out of the repository
+packs/
